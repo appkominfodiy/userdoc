@@ -1,0 +1,37 @@
+# ==============================
+# Environment & virtual env
+# ==============================
+venv/
+backend/venv/
+__pycache__/
+*.pyc
+
+# ==============================
+# Secrets -- JANGAN pernah commit
+# ==============================
+backend/.env
+frontend/.env
+
+# ==============================
+# Data runtime backend (bukan source code, hasil generate)
+# ==============================
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/chroma/*
+!backend/chroma/.gitkeep
+backend/parsed_output/
+**/chroma/
+!backend/chroma/.gitkeep
+
+# ==============================
+# Node / frontend build artifacts
+# ==============================
+frontend/node_modules/
+frontend/dist/
+
+# ==============================
+# Editor / OS
+# ==============================
+.vscode/
+.DS_Store
+Thumbs.db
