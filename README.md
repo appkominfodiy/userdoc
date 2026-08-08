@@ -4,7 +4,7 @@ Chatbot berbasis Retrieval-Augmented Generation (RAG) untuk membantu masyarakat 
 
 Proyek magang di Sekretariat Jenderal Dewan Perwakilan Daerah Republik Indonesia (DPD RI).
 
-> **Status: dalam pengembangan aktif.** Fitur inti (pencarian dokumen, parsing, chunking, chat) sudah berfungsi, tapi beberapa jenis dokumen dan edge case masih dalam proses penyempurnaan. Lihat bagian [Known Limitations](#known-limitations) di bawah.
+> **Status: dalam pengembangan aktif.** Fitur inti (pencarian dokumen, parsing, chunking, chat) sudah berfungsi, tapi beberapa jenis dokumen dan edge case masih dalam proses penyempurnaan.
 
 ## Fitur
 
@@ -69,11 +69,11 @@ npm run dev
 ## Arsitektur Singkat
 User cari dokumen di JDIH browser
 ↓
-Backend unduh PDF dari JDIH (hash SHA-256 jadi document_id, dedup otomatis)
+Backend unduh PDF dari JDIH 
 ↓
-RAG-Anything/MinerU ekstrak konten (mode "pipeline", CPU-only)
+RAG-Anything/MinerU ekstrak konten 
 ↓
-Deteksi jenis dokumen (Perda / Keputusan / Keputusan+Lampiran)
+Deteksi jenis dokumen 
 ↓
 Chunking sesuai struktur dokumen
 ↓
@@ -81,14 +81,7 @@ Embedding (BGE-M3) → ChromaDB (isolasi per-dokumen)
 ↓
 User bertanya → Retrieval (top-k + direct pasal lookup) → Groq LLM → Jawaban + sitasi
 
-## Known Limitations
-
-- **Jenis dokumen "Peraturan Perubahan"** (mis. "Peraturan Gubernur ... tentang Perubahan Atas Peraturan ...") dengan struktur Pasal I/Pasal II bersarang belum didukung chunker — sedang dikembangkan.
-- **Chunk Pasal 1 (Ketentuan Umum)** yang berisi banyak definisi istilah sekaligus bisa kurang presisi untuk pertanyaan definisi spesifik (mis. "apa itu Satpol PP") — model menjawab dari konteks operasional yang tersedia, bukan mengarang, tapi jawabannya bisa kurang lengkap.
-- **Parsing PDF (MinerU)** membutuhkan CPU cukup kuat dan RAM minimal ~12GB free — dokumen besar bisa memakan waktu beberapa menit dan rentan gagal jika RAM sistem sedang penuh.
-- **Rate limit Groq (free tier)**: 30 request/menit, 1.000 request/hari — cukup untuk pengembangan, belum untuk traffic produksi.
-- Belum ada autentikasi/otorisasi (di luar scope versi coba-coba ini).
 
 ## Tahapan Pengembangan
 
-Proyek ini dikembangkan bertahap dari analisis kebutuhan, arsitektur, hingga integrasi penuh (24 tahap), dengan pendekatan verifikasi-sebelum-lanjut di setiap langkah. Riwayat debugging (kompatibilitas Python, konfigurasi MinerU, isu memori, penanganan multi-jenis dokumen hukum) didokumentasikan sebagai bagian dari proses pembelajaran magang.
+Proyek ini dikembangkan bertahap dari analisis kebutuhan, arsitektur, hingga integrasi penuh, dengan pendekatan verifikasi sebelum lanjut di setiap langkah. Riwayat debugging (kompatibilitas Python, konfigurasi MinerU, isu memori, penanganan multi-jenis dokumen hukum) didokumentasikan sebagai bagian dari proses pembelajaran magang.
