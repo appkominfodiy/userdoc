@@ -1,0 +1,20 @@
+# --- Python / Backend ---
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+backend/chroma_db/
+backend/documents/
+backend/markdown_docs/
+*.pyc
+
+# --- Next.js / Frontend ---
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/*.tsbuildinfo
+
+# --- Umum ---
+.vscode/
+.DS_Store
+Thumbs.db
