@@ -119,8 +119,9 @@ useEffect(() => {
 
   return (
     <div className="h-full flex flex-col bg-amber-50">
+      <div className="flex-1 overflow-y-auto">
       <form onSubmit={handleSearchSubmit} className="flex-shrink-0">
-        <div className="bg-gradient-to-r from-red-900 to-red-800 px-5 sm:px-8 pt-8 sm:pt-10 pb-16">
+        <div className="bg-gradient-to-r from-red-900 to-red-800 px-5 sm:px-8 pt-8 sm:pt-10 pb-16 overflow-auto">
           <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight">
             Peraturan Perundang-undangan
           </h2>
@@ -227,7 +228,7 @@ useEffect(() => {
         </div>
       </form>
 
-      <div className="flex-1 overflow-y-auto p-5 sm:p-8 pt-2 space-y-3">
+      <div className="p-5 sm:p-8 pt-2 space-y-3">
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
             {error}
@@ -245,37 +246,62 @@ useEffect(() => {
         )}
 
         {!loading && results.map((doc) => (
-          <div key={doc.id} className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
-            <h3 className="font-medium text-slate-800 text-sm leading-snug">
-              {doc.judul_peraturan}
-            </h3>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-              <span>{doc.kategori_hukum_name}</span>
-              <span>·</span>
-              <span>{doc.tanggal_pengundangan}</span>
-              <span
-                className={`px-2 py-0.5 rounded-full ${
-                  doc.status_produk_hukum === '1'
-                    ? 'bg-green-50 text-green-700'
-                    : doc.status_produk_hukum === '2'
-                    ? 'bg-red-50 text-red-700'
-                    : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                {doc.status_produk_hukum === '1'
-                  ? 'Berlaku'
-                  : doc.status_produk_hukum === '2'
-                  ? 'Tidak Berlaku'
-                  : 'Tidak Diketahui'}
-              </span>
+          <div key={doc.id} className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 sm:p-5 flex gap-4 hover:shadow-md transition">
+            <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center">
+              <img src="/illus-paper.svg" alt="Dokumen" className="w-10 h-10 sm:w-11 sm:h-11 object-contain" />
             </div>
-            <button
-              onClick={() => handleSelect(doc)}
-              disabled={selectingId === doc.id}
-              className="text-sm px-4 py-1.5 rounded-full bg-red-800 text-white hover:bg-red-900 transition disabled:opacity-40"
-            >
-              {selectingId === doc.id ? 'Memproses...' : 'Selengkapnya'}
-            </button>
+
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <p className="text-xs text-slate-500">
+                {doc.judul_lama}
+                {doc.tanggal_pengundangan ? ` | ${doc.tanggal_pengundangan}` : ''}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-medium text-slate-700">{doc.kategori_hukum_name}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full ${
+                    doc.status_produk_hukum === '1'
+                      ? 'bg-green-50 text-green-700'
+                      : doc.status_produk_hukum === '2'
+                      ? 'bg-red-50 text-red-700'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {doc.status_produk_hukum === '1'
+                    ? 'Berlaku'
+                    : doc.status_produk_hukum === '2'
+                    ? 'Tidak Berlaku'
+                    : 'Tidak Diketahui'}
+                </span>
+              </div>
+
+              <h3 className="font-semibold text-slate-800 text-sm leading-snug">
+                {doc.judul_peraturan}
+              </h3>
+
+              <p className="text-xs text-slate-400">
+                {doc.view_count ?? 0} dilihat · {doc.download_count ?? 0} diunduh
+              </p>
+
+              <div className="flex gap-2 pt-1.5">
+                <a
+                  href={doc.file_peraturan}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50 hover:border-slate-400 transition"
+                >
+                  Download
+                </a>
+                <button
+                  onClick={() => handleSelect(doc)}
+                  disabled={selectingId === doc.id}
+                  className="px-5 py-2 rounded-lg bg-red-800 text-white text-sm font-medium hover:bg-red-900 transition disabled:opacity-40"
+                >
+                  {selectingId === doc.id ? 'Memproses...' : 'Selengkapnya'}
+                </button>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -301,6 +327,13 @@ useEffect(() => {
           </button>
         </div>
       )}
+
+      {paging && (
+        <p className="text-center text-xs text-slate-400 pb-2">
+          Menampilkan {results.length > 0 ? (page - 1) * paging.size + 1 : 0}-{Math.min(page * paging.size, paging.total_item)} dari {paging.total_item} item
+        </p>
+      )}
+      </div>
     </div>
   )
 }
