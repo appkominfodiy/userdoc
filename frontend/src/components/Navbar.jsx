@@ -4,7 +4,7 @@ function Navbar({ hasDocument, onBackToBrowse, sidebarOpen, onToggleSidebar }) {
       <div className="px-3 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="Logo"
             className="w-8 h-8 flex-shrink-0 rounded-lg object-contain bg-white/10 p-1"
           />

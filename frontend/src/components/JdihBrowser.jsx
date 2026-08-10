@@ -6,6 +6,20 @@ const KATEGORI_OPTIONS = [
   { value: 1, label: 'Peraturan Daerah' },
   { value: 2, label: 'Peraturan Gubernur' },
   { value: 3, label: 'Keputusan Gubernur' },
+  { value: 4, label: 'Ijin Gubernur' },
+  { value: 5, label: 'Keputusan Sekda' },
+  { value: 6, label: 'Pembentukan Tim' },
+  { value: 7, label: 'Pembentukan Panitia' },
+  { value: 8, label: 'Peraturan Daerah Istimewa' },
+  { value: 9, label: 'Undang-Undang' },
+  { value: 10, label: 'Peraturan Presiden' },
+  { value: 11, label: 'Instruksi Presiden' },
+  { value: 12, label: 'Peraturan Pemerintah' },
+  { value: 13, label: 'Keputusan Presiden' },
+  { value: 15, label: 'Surat Edaran' },
+  { value: 16, label: 'Instruksi Gubernur' },
+  { value: 17, label: 'Propemperda' },
+  { value: 19, label: 'Peraturan Menteri' },
 ]
 
 const STATUS_OPTIONS = [
@@ -69,6 +83,16 @@ useEffect(() => {
     fetchResults()
   }
 
+  function handleReset() {
+    setSearch('')
+    setTahun('')
+    setKategori('')
+    setStatus('')
+    setOrder('-tanggal_pengundangan')
+    setPage(1)
+    fetchResults()
+  }
+
   async function handleSelect(doc) {
     setSelectingId(doc.id)
     setError('')
@@ -95,68 +119,115 @@ useEffect(() => {
 
   return (
     <div className="h-full flex flex-col bg-amber-50">
-      <form onSubmit={handleSearchSubmit} className="p-4 bg-white border-b border-slate-200 space-y-3">
-        <div className="relative">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ketik kata kunci pencarian"
-            className="w-full border border-slate-300 rounded-lg pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-          />
-          <button
-            type="submit"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-700"
-          >
-            🔍
-          </button>
+      <form onSubmit={handleSearchSubmit} className="flex-shrink-0">
+        <div className="bg-gradient-to-r from-red-900 to-red-800 px-5 sm:px-8 pt-8 sm:pt-10 pb-16">
+          <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight">
+            Peraturan Perundang-undangan
+          </h2>
+          <p className="text-blue-100 text-sm mt-1">
+            Peraturan tertulis tentang norma hukum di wilayah Daerah Istimewa Yogyakarta
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <select
-            value={tahun}
-            onChange={(e) => { setTahun(e.target.value); setPage(1) }}
-            className="border border-slate-300 rounded-lg px-2 py-2 text-sm"
-          >
-            <option value="">Semua tahun</option>
-            {Array.from({ length: 10 }, (_, i) => 2026 - i).map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+        <div className="px-5 sm:px-8 -mt-12 pb-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-600 mb-1.5">Pencarian</span>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Ketik kata kunci pencarian"
+                    className="w-full border border-slate-200 rounded-lg pl-3 pr-9 py-2.5 text-sm focus:outline-none focus:border-[#6366F1] focus:shadow-[0_4px_12px_rgba(99,102,241,0.12)] transition"
+                  />
+                  <button
+                    type="submit"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#043BAC]"
+                    aria-label="Cari"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
+                    </svg>
+                  </button>
+                </div>
+              </label>
 
-          <select
-            value={kategori}
-            onChange={(e) => { setKategori(e.target.value); setPage(1) }}
-            className="border border-slate-300 rounded-lg px-2 py-2 text-sm"
-          >
-            {KATEGORI_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-600 mb-1.5">Tahun</span>
+                <select
+                  value={tahun}
+                  onChange={(e) => { setTahun(e.target.value); setPage(1) }}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#6366F1] focus:shadow-[0_4px_12px_rgba(99,102,241,0.12)] transition"
+                >
+                  <option value="">Ketik tahun</option>
+                  {Array.from({ length: 10 }, (_, i) => 2026 - i).map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </label>
 
-          <select
-            value={status}
-            onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-            className="border border-slate-300 rounded-lg px-2 py-2 text-sm"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-600 mb-1.5">Kategori</span>
+                <select
+                  value={kategori}
+                  onChange={(e) => { setKategori(e.target.value); setPage(1) }}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#6366F1] focus:shadow-[0_4px_12px_rgba(99,102,241,0.12)] transition"
+                >
+                  {KATEGORI_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
 
-          <select
-            value={order}
-            onChange={(e) => { setOrder(e.target.value); setPage(1) }}
-            className="border border-slate-300 rounded-lg px-2 py-2 text-sm"
-          >
-            {ORDER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-600 mb-1.5">Status</span>
+                <select
+                  value={status}
+                  onChange={(e) => { setStatus(e.target.value); setPage(1) }}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#6366F1] focus:shadow-[0_4px_12px_rgba(99,102,241,0.12)] transition"
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="block text-xs font-semibold text-slate-600 mb-1.5">Urutan</span>
+                <select
+                  value={order}
+                  onChange={(e) => { setOrder(e.target.value); setPage(1) }}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-[#6366F1] focus:shadow-[0_4px_12px_rgba(99,102,241,0.12)] transition"
+                >
+                  {ORDER_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50 hover:border-slate-400 transition"
+              >
+                Reset
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm font-medium shadow-sm transition disabled:opacity-40"
+              >
+                Cari
+              </button>
+            </div>
+          </div>
         </div>
       </form>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-5 sm:p-8 pt-2 space-y-3">
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
             {error}
