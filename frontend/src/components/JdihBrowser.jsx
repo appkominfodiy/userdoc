@@ -121,11 +121,11 @@ useEffect(() => {
     <div className="h-full flex flex-col bg-amber-50">
       <div className="flex-1 overflow-y-auto">
       <form onSubmit={handleSearchSubmit} className="flex-shrink-0">
-        <div className="bg-gradient-to-r from-red-900 to-red-800 px-5 sm:px-8 pt-8 sm:pt-10 pb-16 overflow-auto">
-          <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight">
+        <div className="bg-gradient-to-r from-blue-200 to-blue-700 px-5 sm:px-8 pt-8 sm:pt-10 pb-16 overflow-auto">
+          <h2 className="text-black text-xl sm:text-2xl font-bold leading-tight">
             Peraturan Perundang-undangan
           </h2>
-          <p className="text-blue-100 text-sm mt-1">
+          <p className="text-black-100 text-sm mt-1">
             Peraturan tertulis tentang norma hukum di wilayah Daerah Istimewa Yogyakarta
           </p>
         </div>
@@ -213,15 +213,16 @@ useEffect(() => {
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50 hover:border-slate-400 transition"
+                className="px-6 py-2.5 rounded-lg border border-blue-500 text-blue-500 text-sm font-medium hover:bg-blue-50 hover:border-slate-400 transition"
               >
                 Reset
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm font-medium shadow-sm transition disabled:opacity-40"
+                className="px-6 py-2.5 inline-flex gap-2 item-center justify-center rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-sm transition disabled:opacity-40"
               >
                 Cari
+                <svg data-v-e0b715d7="" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="h-5 w-5 iconify iconify--mdi" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5l-1.5 1.5l-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16A6.5 6.5 0 0 1 3 9.5A6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14S14 12 14 9.5S12 5 9.5 5"></path></svg>
               </button>
             </div>
           </div>
@@ -248,7 +249,7 @@ useEffect(() => {
         {!loading && results.map((doc) => (
           <div key={doc.id} className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 sm:p-5 flex gap-4 hover:shadow-md transition">
             <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center">
-              <img src="/illus-paper.svg" alt="Dokumen" className="w-10 h-10 sm:w-11 sm:h-11 object-contain" />
+              <img src="public/illus-paper.svg" alt="Dokumen" className="w-10 h-10 sm:w-11 sm:h-11 object-contain" />
             </div>
 
             <div className="flex-1 min-w-0 space-y-1.5">
@@ -289,16 +290,19 @@ useEffect(() => {
                   href={doc.file_peraturan}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-slate-50 hover:border-slate-400 transition"
+                  className="px-5 py-2 inline-flex gap-2 rounded-lg bg-blue-500 text-white text-xs border-blue-500 text-sm font-medium hover:bg-blue-600 transition disabled:opacity-40"
                 >
                   Download
+                  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">baseline-download</title><path fill="currentColor" d="M5 20h14v-2H5zM19 9h-4V3H9v6H5l7 7z"/></svg>
                 </a>
+                
                 <button
                   onClick={() => handleSelect(doc)}
                   disabled={selectingId === doc.id}
-                  className="px-5 py-2 rounded-lg bg-red-800 text-white text-sm font-medium hover:bg-red-900 transition disabled:opacity-40"
+                  className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-lg text-xs font-medium border border-blue-500 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
                 >
                   {selectingId === doc.id ? 'Memproses...' : 'Selengkapnya'}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32"><title xmlns="">arrows-long-right</title><path fill="currentColor" d="m21.188 9.28l-1.407 1.44L24.063 15H4v2h20.063l-4.282 4.28l1.407 1.44l6-6l.72-.72l-.72-.72z"/></svg>
                 </button>
               </div>
             </div>

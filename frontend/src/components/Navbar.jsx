@@ -1,21 +1,12 @@
 function Navbar({ hasDocument, onBackToBrowse, sidebarOpen, onToggleSidebar }) {
   return (
-    <nav className="sticky top-0 z-30 bg-gradient-to-r from-red-900 to-red-800 shadow-md">
+    <nav className="sticky top-0 z-30 bg-gradient-to-r from-blue-100 to-blue-600 shadow-md">
       <div className="px-3 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div classname="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
-            src="/logo.svg"
+            src="public/icon.png"
             alt="Logo"
-            className="w-8 h-8 flex-shrink-0 rounded-lg object-contain bg-white/10 p-1"
           />
-          <div className="min-w-0">
-            <h1 className="font-semibold text-white text-sm leading-tight truncate">
-              Chatbot Perda DIY
-            </h1>
-            <p className="hidden sm:block text-xs text-red-200 leading-tight">
-              JDIH DPRD DIY
-            </p>
-          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
