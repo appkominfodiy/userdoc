@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peraturan Perundang-undangan - JDIH Pemda DIY</title>
+    <meta name="description" content="Portal Resmi JDIH Pemerintah Daerah Daerah Istimewa Yogyakarta">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body data-category="putusan">
+    
+    <!-- Navbar -->
+    <div class="container" style="position: sticky; top: 1rem; z-index: 100;">
+        <nav class="navbar pill-navbar">
+            <div class="nav-content">
+            <div class="logo">
+                <img src="https://jdih.jogjaprov.go.id/logo_jdih.png" alt="Logo Pemda DIY" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/b/b3/Lambang_Daerah_Istimewa_Yogyakarta.svg'; this.style.height='40px';">
+                <div class="logo-text">
+                    <h1>JARINGAN DOKUMENTASI DAN INFORMASI HUKUM</h1>
+                    <p>PEMERINTAH DAERAH<br>DAERAH ISTIMEWA YOGYAKARTA</p>
+                </div>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#">Beranda</a></li>
+                <li class="dropdown">
+                    <a href="#" class="active">Dokumen Hukum <i class="fas fa-chevron-down text-xs"></i></a>
+                    <ul class="submenu documents-submenu">
+                        <li>
+                            <a href="index.html">
+                                <i class="fas fa-book"></i>
+                                <div>
+                                    <strong>Peraturan Perundang-undangan</strong>
+                                    <span>Kumpulan Peraturan Perundang-undangan</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="monografi.html">
+                                <i class="fas fa-book-open"></i>
+                                <div>
+                                    <strong>Monografi Hukum</strong>
+                                    <span>Kumpulan Monografi Hukum</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="artikel.html">
+                                <i class="fas fa-file-alt"></i>
+                                <div>
+                                    <strong>Artikel Hukum</strong>
+                                    <span>Kumpulan artikel hukum</span>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="putusan.html">
+                                <i class="fas fa-gavel"></i>
+                                <div>
+                                    <strong>Putusan Pengadilan</strong>
+                                    <span>Daftar putusan pengadilan</span>
+                                </div>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a href="#">Dokumen Pembentukan PUU <i class="fas fa-chevron-down text-xs"></i></a>
+                </li>
+                <li class="dropdown">
+                    <a href="#">Layanan <i class="fas fa-chevron-down text-xs"></i></a>
+                </li>
+                <li><a href="#">Berita</a></li>
+                <li class="dropdown">
+                    <a href="#">Statistik <i class="fas fa-chevron-down text-xs"></i></a>
+                </li>
+                <li class="dropdown">
+                    <a href="#">Galeri <i class="fas fa-chevron-down text-xs"></i></a>
+                </li>
+                <li class="dropdown">
+                    <a href="#">Tentang Kami <i class="fas fa-chevron-down text-xs"></i></a>
+                </li>
+            </ul>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Main Section -->
+    <main class="container main-content">
+        
+        <!-- Search Card -->
+        <section class="search-card">
+            <div class="breadcrumb" id="breadcrumb">
+                <a href="#">Beranda</a> / <a href="#">Produk Hukum</a> / <strong>Putusan Pengadilan</strong>
+            </div>
+            
+            <div class="search-header-container">
+                <div class="search-text">
+                    <h2 id="pageTitle">Putusan Pengadilan</h2>
+                    <p id="pageDescription">Daftar putusan pengadilan yang berkaitan dengan Pemerintah Daerah Daerah Istimewa Yogyakarta</p>
+                </div>
+                <div class="search-illustration">
+                    <img src="https://jdih.jogjaprov.go.id/assets/images/illustration/search-doc.svg" alt="" onerror="this.style.display='none';">
+                </div>
+            </div>
+
+            <div class="search-form">
+                <div class="form-group full-width">
+                    <label>Pencarian</label>
+                    <input type="text" placeholder="Ketik kata kunci (Judul / Subjek)" class="form-control" id="searchInput">
+                </div>
+                
+                <div class="form-row" id="dynamicFilters">
+                    <div class="form-group">
+                        <label>Tahun</label>
+                        <select class="form-control" id="yearInput"><option value="">Pilih tahun</option></select>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="fetchAndRenderJDIHDocuments()"><i class="fas fa-search"></i> Cari</button>
+                    <button class="btn btn-outline-rounded" id="resetBtn" onclick="resetSearch()">Reset</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- List Produk Hukum -->
+        <section class="documents-section">
+            <div class="documents-grid" id="documentsGrid">
+                <!-- Loading state -->
+                <div class="loading-state">
+                    <i class="fas fa-spinner fa-spin"></i> Memuat data dari server JDIH...
+                </div>
+            </div>
+            
+            <!-- Pagination Container -->
+            <div class="pagination-wrapper" id="paginationContainer"></div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 JDIH Pemerintah Daerah Daerah Istimewa Yogyakarta. Hak Cipta Dilindungi.</p>
+        </div>
+    </footer>
+
+    <!-- Accessibility Toggle -->
+    <button class="accessibility-btn">
+        <i class="fas fa-wheelchair"></i>
+    </button>
+
+    <!-- Floating Chatbot Widget -->
+    <div class="chat-widget-container">
+        <div class="chat-window" id="chatWindow">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <h4>AI Asisten Hukum</h4>
+                    <span class="status">Online (Hermes)</span>
+                </div>
+                <button class="btn-close-chat" id="closeChatBtn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    <div class="message-content">
+                        Halo! Saya AI Assistant JDIH Jogja. Silakan tanyakan hal seputar dokumen hukum yang ada di database.
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-start;">
+                    <div class="suggestion-chips">
+                        <div class="suggestion-chip" onclick="document.getElementById('userInput').value='Apa itu JDIH?'; document.getElementById('chatForm').dispatchEvent(new Event('submit'))">Apa itu JDIH?</div>
+                        <div class="suggestion-chip" onclick="document.getElementById('userInput').value='Bagaimana cara mencari peraturan?'; document.getElementById('chatForm').dispatchEvent(new Event('submit'))">Bagaimana cara mencari peraturan?</div>
+                        <div class="suggestion-chip" onclick="document.getElementById('userInput').value='Berikan contoh produk hukum daerah'; document.getElementById('chatForm').dispatchEvent(new Event('submit'))">Berikan contoh produk hukum daerah</div>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <form id="chatForm">
+                    <input type="text" id="userInput" placeholder="Tanya tentang hukum..." autocomplete="off" required>
+                    <button type="submit" class="btn-send" id="sendBtn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <button class="floating-btn" id="chatToggleBtn">
+            <img src="https://jdih.jogjaprov.go.id/assets/images/logo_ai.png" alt="AI Chat" style="width: 24px; height: 24px; filter: brightness(0) invert(1);" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fas fa-robot\'></i>';">
+        </button>
+    </div>
+
+    <!-- PDF Detail Modal -->
+    <div id="pdfModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalDocTitle">Detail Peraturan</h3>
+                <button class="btn-close-modal" id="closePdfModalBtn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="pdf-container">
+                    <iframe id="pdfIframe" src="" frameborder="0"></iframe>
+                </div>
+                <div class="modal-chat-container">
+                    <div class="chat-header-info" style="padding: 1rem; background: var(--primary); color: white;">
+                        <h4><i class="fas fa-robot"></i> AI Asisten Dokumen</h4>
+                    </div>
+                    <div class="chat-messages" id="modalChatMessages" style="flex: 1; padding: 1rem; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="message system">
+                            <div class="message-content" style="background: white; padding: 0.75rem 1rem; border-radius: 12px; border: 1px solid var(--border); border-bottom-left-radius: 4px; display: inline-block;">
+                                Halo! Saya siap membantu Anda memahami dokumen ini. Apa yang ingin Anda tanyakan?
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area" style="padding: 1rem; background: white; border-top: 1px solid var(--border);">
+                        <form id="modalChatForm" style="display: flex; gap: 0.5rem;">
+                            <input type="text" id="modalUserInput" placeholder="Tanya tentang dokumen ini..." autocomplete="off" required style="flex: 1; padding: 0.75rem; border: 1px solid var(--border); border-radius: 20px; outline: none;">
+                            <button type="submit" class="btn-send" id="modalSendBtn" style="background: var(--primary); color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
