@@ -4,6 +4,8 @@ python-dotenv
 pydantic-settings
 python-multipart
 groq
+qdrant-client
+openai
 chromadb
 langchain-chroma
 langchain-core

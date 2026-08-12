@@ -84,7 +84,7 @@ function Chatbot({ documentId, onJumpToPage }) {
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}>
             {msg.role === 'bot' && (
-              <div className="w-7 h-7 flex-shrink-0 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-semibold">
+              <div className="w-7 h-7 flex-shrink-0 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-semibold">
                 AI
               </div>
             )}
@@ -92,7 +92,7 @@ function Chatbot({ documentId, onJumpToPage }) {
             <div
               className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm ${
                 msg.role === 'user'
-                  ? 'bg-red-800 text-white rounded-br-sm'
+                  ? 'bg-blue-600 text-white rounded-br-sm'
                   : msg.isError
                   ? 'bg-red-50 text-red-600 border border-red-100 rounded-bl-sm'
                   : 'bg-slate-100 text-slate-700 rounded-bl-sm'
@@ -112,7 +112,7 @@ function Chatbot({ documentId, onJumpToPage }) {
                     <button
                       key={j}
                       onClick={() => onJumpToPage(msg.sourcePages[j])}
-                      className="text-xs px-2 py-1 bg-white border border-slate-200 rounded-full text-slate-600 hover:border-red-300 hover:text-red-700 transition"
+                      className="text-xs px-2 py-1 bg-white border border-slate-200 rounded-full text-slate-600 hover:border-blue-300 hover:text-blue-700 transition"
                     >
                       {pasal} · hal.{msg.sourcePages[j]}
                     </button>
@@ -146,12 +146,12 @@ function Chatbot({ documentId, onJumpToPage }) {
           onKeyDown={handleKeyDown}
           placeholder="Tanyakan sesuatu..."
           rows={1}
-          className="flex-1 resize-none border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent"
+          className="flex-1 resize-none border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
         />
         <button
           onClick={handleSend}
           disabled={loading || !input.trim()}
-          className="px-4 py-2 bg-red-800 text-white rounded-xl text-sm disabled:opacity-40 hover:bg-red-900 transition"
+          className="px-4 py-2 bg-blue-800 text-white rounded-xl text-sm disabled:opacity-40 hover:bg-blue-900 transition"
         >
           Kirim
         </button>

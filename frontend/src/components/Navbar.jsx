@@ -4,7 +4,7 @@ function Navbar({ hasDocument, onBackToBrowse, sidebarOpen, onToggleSidebar }) {
       <div className="px-3 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-2">
         <div classname="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
-            src="public/icon.png"
+            src="/icon.png"
             alt="Logo"
           />
         </div>
@@ -20,7 +20,7 @@ function Navbar({ hasDocument, onBackToBrowse, sidebarOpen, onToggleSidebar }) {
               </button>
               <button
                 onClick={onBackToBrowse}
-                className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-full bg-white text-red-800 font-medium hover:bg-red-50 transition whitespace-nowrap"
+                className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-full bg-white text-ble-800 font-medium hover:bg-blue-50 transition whitespace-nowrap"
               >
                 Cari Dokumen Lain
               </button>
