@@ -149,55 +149,107 @@ class RagflowService
     }
 
     /**
+     * Cek apakah pertanyaan di luar scope peraturan DIY.
+     */
+    protected function isOutOfScope(string $question): ?string
+    {
+        $keywords = config('jdih_prompts.out_of_scope_keywords', []);
+        $questionLower = strtolower($question);
+
+        foreach ($keywords as $keyword) {
+            if (str_contains($questionLower, strtolower($keyword))) {
+                return $keyword; // kembalikan keyword yang terdeteksi
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Tanya-jawab yang di-scope ke 1 dokumen: ambil chunk relevan dari
-     * RAGFlow, susun sebagai konteks, lalu minta LLM (OpenRouter) menjawab
-     * HANYA berdasarkan konteks itu.
+     * RAGFlow, susun sebagai konteks, lalu minta LLM menjawab HANYA
+     * berdasarkan konteks itu. Pakai prompt template dari config.
      */
     public function askDocument(string $documentId, string $question): string
     {
-        $chunks = $this->retrieveChunks($documentId, $question);
-
-        if (empty($chunks)) {
-            return 'Maaf, tidak ditemukan bagian dokumen yang relevan dengan pertanyaan ini.';
+        // === 1. Deteksi pertanyaan terlalu pendek / ambigu ===
+        $minLength = config('jdih_prompts.min_question_length', 10);
+        if (strlen(trim($question)) < $minLength) {
+            return config('jdih_prompts.negative_responses.too_vague');
         }
 
+        // === 2. Deteksi pertanyaan di luar scope hukum ===
+        $outOfScopeKeyword = $this->isOutOfScope($question);
+        if ($outOfScopeKeyword) {
+            return str_replace(
+                '{topic}',
+                $outOfScopeKeyword,
+                config('jdih_prompts.negative_responses.out_of_scope')
+            );
+        }
+
+        // === 3. Retrieval chunks dari RAGFlow ===
+        try {
+            $chunks = $this->retrieveChunks($documentId, $question);
+        } catch (\Exception $e) {
+            Log::error('Error saat retrieval', ['exception' => $e->getMessage()]);
+            return config('jdih_prompts.negative_responses.technical_error');
+        }
+
+        // === 4. Kalau tidak ada chunk relevan ===
+        if (empty($chunks)) {
+            return str_replace(
+                '{question}',
+                $question,
+                config('jdih_prompts.negative_responses.no_context')
+            );
+        }
+
+        // === 5. Susun konteks dari chunks ===
         $context = collect($chunks)
             ->pluck('content')
             ->filter()
             ->implode("\n\n---\n\n");
 
-        $systemPrompt = <<<PROMPT
-Kamu adalah asisten hukum yang menjawab HANYA berdasarkan potongan dokumen berikut.
-Jangan menjawab dari pengetahuan umum. Kalau jawabannya tidak ada di dalam konteks,
-katakan dengan jujur bahwa informasi tersebut tidak ditemukan di dokumen ini.
-Jawab dalam Bahasa Indonesia, jelas dan ringkas.
+        // === 6. Ambil prompt template dari config ===
+        $systemPrompt = config('jdih_prompts.system');
+        $userPrompt = str_replace(
+            ['{context}', '{question}'],
+            [$context, $question],
+            config('jdih_prompts.user_template')
+        );
 
-KONTEKS DOKUMEN:
-{$context}
-PROMPT;
-
+        // === 7. Panggil LLM (OpenRouter untuk sekarang) ===
         foreach ($this->fallbackModels as $model) {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->openrouterKey,
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post("{$this->openrouterUrl}/chat/completions", [
-                'model' => $model,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => $question],
-                ],
-            ]);
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $this->openrouterKey,
+                    'Content-Type' => 'application/json',
+                ])->timeout(60)->post("{$this->openrouterUrl}/chat/completions", [
+                    'model' => $model,
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $userPrompt],
+                    ],
+                ]);
 
-            if ($response->successful()) {
-                return $response->json('choices.0.message.content') ?? 'Tidak ada jawaban.';
+                if ($response->successful()) {
+                    return $response->json('choices.0.message.content') ?? 'Tidak ada jawaban.';
+                }
+
+                Log::warning('Model OpenRouter gagal, coba fallback berikutnya', [
+                    'model' => $model,
+                    'status' => $response->status(),
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Exception saat panggil OpenRouter', [
+                    'model' => $model,
+                    'error' => $e->getMessage(),
+                ]);
             }
-
-            Log::warning('Model OpenRouter gagal, coba fallback berikutnya', [
-                'model' => $model,
-                'status' => $response->status(),
-            ]);
         }
 
-        return 'Maaf, semua model AI sedang tidak tersedia. Coba lagi sebentar.';
+        // === 8. Kalau semua model gagal ===
+        return config('jdih_prompts.negative_responses.technical_error');
     }
 }
