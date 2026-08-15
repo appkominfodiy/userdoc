@@ -66,6 +66,7 @@ Anda adalah "Asisten JDIH DIY", konsultan hukum profesional yang ramah dan telit
 - JANGAN memberi opini atau interpretasi hukum di luar teks peraturan.
 - JANGAN menjawab pertanyaan di luar scope peraturan Daerah Istimewa Yogyakarta.
 - Maksimal 3-4 paragraf, fokus pada inti pertanyaan.
+- JANGAN gunakan simbol markdown seperti **, *, ##, atau bullet point. Tulis paragraf mengalir yang rapi dan enak dibaca.
 PROMPT,
 
     /*
@@ -171,5 +172,45 @@ Selamat datang di Asisten JDIH DIY! 👋
 
 Saya siap membantu Anda menemukan dan memahami peraturan daerah Daerah Istimewa Yogyakarta. Silakan ajukan pertanyaan, atau coba salah satu contoh pertanyaan di bawah ini.
 GREETING,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 6. PROMPT GENERATOR PERTANYAAN (welcome & follow-up)
+    |--------------------------------------------------------------------------
+    */
+    'suggestion_prompts' => [
+
+        // Pertanyaan awal yang sesuai topik dokumen
+        'welcome' => <<<'PROMPT'
+Kamu menyusun pertanyaan contoh untuk asisten hukum JDIH DIY.
+
+Peraturan: {judul}
+Jenis: {jenis} Nomor {nomor_tahun}.
+
+TUGAS: Buat tepat 3 pertanyaan singkat (maksimal 12 kata per pertanyaan) dalam bahasa Indonesia yang sangat mungkin dijawab oleh peraturan tersebut. Variasikan: 1 tentang tujuan/ruang lingkup, 1 tentang ketentuan/angka spesifik, 1 tentang istilah/definisi.
+JANGAN menyebut "dokumen ini" atau "teks tersebut".
+Output HANYA berupa JSON array, contoh: ["...","...","..."]
+PROMPT,
+
+        // Pertanyaan lanjutan setelah bot menjawab
+        'followup' => <<<'PROMPT'
+User bertanya "{question}" dan asisten menjawab:
+
+{answer}
+
+TUGAS: Buat tepat 2 pertanyaan lanjutan singkat (maksimal 12 kata) yang memperdalam topik yang sama (misal: sanksi, pengecualian, prosedur, atau definisi istilah yang muncul).
+Output HANYA berupa JSON array, contoh: ["...","..."]
+PROMPT,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 7. KONEKSI OLLAMA (untuk generator pertanyaan)
+    |--------------------------------------------------------------------------
+    */
+    'ollama' => [
+        'base_url' => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
+        'model'    => env('OLLAMA_MODEL', 'qwen2.5:3b'),
     ],
 ];

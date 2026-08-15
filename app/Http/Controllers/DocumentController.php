@@ -5,14 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\DokumenHukum;
 use App\Services\RagflowService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class DocumentController extends Controller
 {
-    /**
-     * Halaman daftar semua dokumen — dari database Laravel (dokumen_hukums).
-     */
     public function index()
     {
         $documents = DokumenHukum::orderByDesc('tanggal_penetapan')
@@ -23,23 +22,23 @@ class DocumentController extends Controller
         ]);
     }
 
-    /**
-     * Halaman detail 1 dokumen — split view PDF + chatbot.
-     */
     public function show(DokumenHukum $dokumenHukum)
     {
         return Inertia::render('Documents/Show', [
             'document' => $dokumenHukum,
+            'assistant' => [
+                'name'         => config('jdih_prompts.assistant_profile.name'),
+                'tagline'      => config('jdih_prompts.assistant_profile.tagline'),
+                'greeting'     => config('jdih_prompts.assistant_profile.greeting'),
+                'description'  => config('jdih_prompts.assistant_profile.description'),
+                'capabilities' => config('jdih_prompts.assistant_profile.capabilities'),
+                'suggested'    => config('jdih_prompts.assistant_profile.suggested_questions'),
+            ],
         ]);
     }
 
-    /**
-     * Proxy PDF — Laravel yang mengambil PDF dari JDIH,
-     * supaya browser tidak kena blokir CORS.
-     */
     public function pdf(DokumenHukum $dokumenHukum)
     {
-        // ⚠️ Mencoba beberapa nama kolom yang mungkin menyimpan URL PDF
         $url = $dokumenHukum->file_peraturan
             ?? $dokumenHukum->pdf_url
             ?? $dokumenHukum->file_url;
@@ -64,11 +63,11 @@ class DocumentController extends Controller
         ]);
     }
 
-    /**
-     * Endpoint chat — retrieval RAGFlow di-scope ke dokumen ini.
-     */
     public function chat(Request $request, DokumenHukum $dokumenHukum, RagflowService $ragflow)
     {
+        // Kasih waktu sampai 2 menit untuk generate follow-up
+        set_time_limit(120);
+
         $request->validate([
             'question' => 'required|string|max:1000',
         ]);
@@ -84,6 +83,76 @@ class DocumentController extends Controller
             $request->input('question')
         );
 
-        return response()->json(['answer' => $answer]);
+        // Generate 2 pertanyaan lanjutan dari topik jawaban
+        $suggestions = [];
+        try {
+            $prompt = str_replace(
+                ['{question}', '{answer}'],
+                [$request->input('question'), Str::limit($answer, 1500)],
+                config('jdih_prompts.suggestion_prompts.followup')
+            );
+            $suggestions = $this->parseJsonArray($this->ollamaGenerate($prompt));
+        } catch (\Throwable $e) {
+            $suggestions = [];
+        }
+
+        return response()->json([
+            'answer'      => $answer,
+            'suggestions' => $suggestions,
+        ]);
+    }
+
+    public function suggestions(DokumenHukum $dokumenHukum)
+    {
+        // Kasih waktu sampai 2 menit untuk cold-start Ollama
+        set_time_limit(120);
+
+        $suggestions = Cache::remember(
+            'doc_suggestions_'.$dokumenHukum->id,
+            60 * 60 * 24,
+            function () use ($dokumenHukum) {
+                $prompt = str_replace(
+                    ['{judul}', '{jenis}', '{nomor_tahun}'],
+                    [$dokumenHukum->judul, $dokumenHukum->jenis, $dokumenHukum->nomor.' Tahun '.$dokumenHukum->tahun],
+                    config('jdih_prompts.suggestion_prompts.welcome')
+                );
+
+                return $this->parseJsonArray($this->ollamaGenerate($prompt));
+            }
+        );
+
+        return response()->json(['suggestions' => $suggestions]);
+    }
+
+    private function ollamaGenerate(string $prompt): string
+    {
+        $resp = Http::timeout(90)
+            ->connectTimeout(10)
+            ->post(
+                config('jdih_prompts.ollama.base_url').'/api/generate',
+                [
+                    'model'  => config('jdih_prompts.ollama.model'),
+                    'prompt' => $prompt,
+                    'stream' => false,
+                    'options' => [
+                        'num_predict' => 300,  // batasi output biar cepat
+                        'temperature' => 0.3,
+                    ],
+                ]
+            );
+
+        return $resp->successful() ? ($resp->json('response') ?? '') : '';
+    }
+
+    private function parseJsonArray(string $raw): array
+    {
+        if (preg_match('/\[[^\]]*\]/s', $raw, $m)) {
+            $arr = json_decode($m[0], true);
+            if (is_array($arr)) {
+                return array_values(array_filter($arr, 'is_string'));
+            }
+        }
+
+        return [];
     }
 }
