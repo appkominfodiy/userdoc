@@ -7,6 +7,7 @@ use App\Services\RagflowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -44,29 +45,33 @@ class DocumentController extends Controller
             ?? $dokumenHukum->file_url;
 
         if (! $url) {
-            return response()->json([
-                'error' => 'URL PDF tidak ditemukan di tabel dokumen_hukums. Cek nama kolomnya.',
-            ], 422);
+            abort(404, 'URL PDF tidak ditemukan di database.');
         }
 
-        $resp = Http::timeout(60)->get($url);
+        try {
+            // Coba download via proxy Laravel (timeout 60 detik)
+            $resp = Http::timeout(60)->connectTimeout(10)->get($url);
 
-        if (! $resp->successful()) {
-            return response()->json([
-                'error' => 'Gagal mengambil PDF dari JDIH (HTTP '.$resp->status().')',
-            ], 502);
+            // Kalau sukses dan benar-benar PDF, kembalikan ke browser
+            if ($resp->successful() && str_contains($resp->header('Content-Type') ?? '', 'pdf')) {
+                return response($resp->body(), 200, [
+                    'Content-Type'  => 'application/pdf',
+                    'Cache-Control' => 'public, max-age=86400',
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Kalau timeout atau error, biarkan lanjut ke fallback di bawah
+            Log::warning('Proxy PDF gagal untuk dokumen '.$dokumenHukum->id.': '.$e->getMessage());
         }
 
-        return response($resp->body(), 200, [
-            'Content-Type' => 'application/pdf',
-            'Cache-Control' => 'public, max-age=86400',
-        ]);
+        // FALLBACK: Kalau proxy gagal/timeout, redirect langsung ke URL asli JDIH
+        // Browser user yang akan langsung fetch ke server JDIH (lebih stabil)
+        return redirect()->away($url);
     }
 
     public function chat(Request $request, DokumenHukum $dokumenHukum, RagflowService $ragflow)
     {
-        // Kasih waktu sampai 2 menit untuk generate follow-up
-        set_time_limit(120);
+        set_time_limit(300);
 
         $request->validate([
             'question' => 'required|string|max:1000',
@@ -83,16 +88,16 @@ class DocumentController extends Controller
             $request->input('question')
         );
 
-        // Generate 2 pertanyaan lanjutan dari topik jawaban
         $suggestions = [];
         try {
             $prompt = str_replace(
                 ['{question}', '{answer}'],
-                [$request->input('question'), Str::limit($answer, 1500)],
+                [$request->input('question'), Str::limit($answer, 800)],
                 config('jdih_prompts.suggestion_prompts.followup')
             );
             $suggestions = $this->parseJsonArray($this->ollamaGenerate($prompt));
         } catch (\Throwable $e) {
+            Log::warning('Follow-up generation failed: '.$e->getMessage());
             $suggestions = [];
         }
 
@@ -104,8 +109,7 @@ class DocumentController extends Controller
 
     public function suggestions(DokumenHukum $dokumenHukum)
     {
-        // Kasih waktu sampai 2 menit untuk cold-start Ollama
-        set_time_limit(120);
+        set_time_limit(300);
 
         $suggestions = Cache::remember(
             'doc_suggestions_'.$dokumenHukum->id,
@@ -124,33 +128,55 @@ class DocumentController extends Controller
         return response()->json(['suggestions' => $suggestions]);
     }
 
+    /** Generate teks singkat pakai model CEPAT (1.5b). */
     private function ollamaGenerate(string $prompt): string
     {
-        $resp = Http::timeout(90)
+        $resp = Http::timeout(120)
             ->connectTimeout(10)
             ->post(
                 config('jdih_prompts.ollama.base_url').'/api/generate',
                 [
-                    'model'  => config('jdih_prompts.ollama.model'),
+                    'model'  => config('jdih_prompts.ollama.fast_model'),
                     'prompt' => $prompt,
                     'stream' => false,
                     'options' => [
-                        'num_predict' => 300,  // batasi output biar cepat
-                        'temperature' => 0.3,
+                        'num_predict' => 200,
+                        'temperature' => 0.5,
                     ],
                 ]
             );
 
-        return $resp->successful() ? ($resp->json('response') ?? '') : '';
+        $body = $resp->successful() ? ($resp->json('response') ?? '') : '';
+
+        Log::info('Ollama generate response: '.$body);
+
+        return $body;
     }
 
+    /** Ambil array JSON dari respons LLM — tahan terhadap output terpotong. */
     private function parseJsonArray(string $raw): array
     {
+        // 1) Coba JSON array utuh
         if (preg_match('/\[[^\]]*\]/s', $raw, $m)) {
             $arr = json_decode($m[0], true);
             if (is_array($arr)) {
-                return array_values(array_filter($arr, 'is_string'));
+                $clean = array_values(array_filter($arr, 'is_string'));
+                if (count($clean) > 0) {
+                    return $clean;
+                }
             }
+        }
+
+        // 2) Fallback: JSON terpotong → ambil semua string berakhiran "?"
+        preg_match_all('/"([^"\n]{5,100}\?)/u', $raw, $m2);
+        if (! empty($m2[1])) {
+            return array_slice($m2[1], 0, 3);
+        }
+
+        // 3) Fallback: baris polos berakhiran "?"
+        preg_match_all('/^[\s\-\d\.]*([^\n"]{5,100}\?)\s*$/mu', $raw, $m3);
+        if (! empty($m3[1])) {
+            return array_slice($m3[1], 0, 3);
         }
 
         return [];

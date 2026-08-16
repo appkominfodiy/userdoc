@@ -11,24 +11,16 @@ class RagflowService
     protected string $apiKey;
     protected string $datasetName = 'jdih_public';
 
-    protected string $openrouterKey;
-    protected string $openrouterUrl;
-
-    // Model gratis OpenRouter, dicoba urut kalau satu kena rate limit.
-    protected array $fallbackModels = [
-        'google/gemma-4-31b-it:free',
-        'nvidia/nemotron-3-nano-30b-a3b:free',
-        'openai/gpt-oss-20b:free',
-        'cohere/north-mini-code:free',
-    ];
+    protected string $ollamaUrl;
+    protected string $ollamaModel;
 
     public function __construct()
     {
         $this->baseUrl = rtrim(config('services.ragflow.base_url'), '/');
         $this->apiKey = config('services.ragflow.api_key');
 
-        $this->openrouterKey = config('services.openrouter.api_key');
-        $this->openrouterUrl = rtrim(config('services.openrouter.base_url'), '/');
+        $this->ollamaUrl = rtrim(config('jdih_prompts.ollama.base_url', 'http://localhost:11434'), '/');
+        $this->ollamaModel = config('jdih_prompts.ollama.model', 'qwen2.5:3b');
     }
 
     protected function headers(): array
@@ -38,10 +30,6 @@ class RagflowService
         ];
     }
 
-    /**
-     * Cari dataset "jdih_public" — kalau belum ada, buat baru dengan
-     * chunk_method "laws" sesuai rekomendasi pembimbing untuk dokumen hukum.
-     */
     public function ensureDataset(): string
     {
         $response = Http::withHeaders($this->headers())
@@ -69,10 +57,6 @@ class RagflowService
         return $createResponse->json('data.id');
     }
 
-    /**
-     * Download PDF dari URL JDIH, lalu upload ke dataset RAGFlow.
-     * Mengembalikan document_id RAGFlow kalau berhasil.
-     */
     public function uploadDocument(string $datasetId, string $pdfUrl, string $fileName): ?string
     {
         $pdfResponse = Http::timeout(180)->connectTimeout(20)->retry(2, 2000)->get($pdfUrl);
@@ -99,9 +83,6 @@ class RagflowService
         return $data[0]['id'] ?? null;
     }
 
-    /**
-     * Trigger parsing untuk 1 atau lebih document_id di dataset tertentu.
-     */
     public function triggerParse(string $datasetId, array $documentIds): bool
     {
         $response = Http::withHeaders($this->headers())
@@ -121,20 +102,22 @@ class RagflowService
     }
 
     /**
-     * Ambil chunk relevan dari RAGFlow, DIBATASI cuma ke 1 dokumen tertentu
-     * (document_ids) — ini yang bikin chat ter-scope per dokumen, bukan
-     * nyari ke seluruh dataset jdih_public.
+     * Retrieval chunk dari RAGFlow, di-rerank: chunk yang MEMBUKA pasal
+     * yang ditanya diprioritaskan. top_k = 12 biar pasal yang benar ikut masuk.
      */
-    public function retrieveChunks(string $documentId, string $question, int $topK = 6): array
+    public function retrieveChunks(string $documentId, string $question, int $topK = 12): array
     {
         $datasetId = $this->ensureDataset();
 
         $response = Http::withHeaders($this->headers())
+            ->timeout(30)
             ->post("{$this->baseUrl}/api/v1/retrieval", [
                 'question' => $question,
                 'dataset_ids' => [$datasetId],
                 'document_ids' => [$documentId],
                 'top_k' => $topK,
+                'similarity_threshold' => 0.1,
+                'vector_similarity_weight' => 0.3,
             ]);
 
         if (! $response->successful()) {
@@ -145,12 +128,52 @@ class RagflowService
             return [];
         }
 
-        return $response->json('data.chunks') ?? [];
+        $chunks = $response->json('data.chunks') ?? [];
+
+        // RERANK: prioritaskan chunk yang membuka pasal yang ditanya
+        $chunks = $this->prioritizePasal($chunks, $question);
+
+        // DEBUG: lihat 3 chunk teratas yang akan dikirim ke AI
+        $previews = [];
+        foreach (array_slice($chunks, 0, 3) as $c) {
+            $previews[] = substr(preg_replace('/\s+/', ' ', $c['content'] ?? ''), 0, 120);
+        }
+        Log::info('Top chunks setelah rerank: ', $previews);
+
+        // 3 chunk terbaik saja biar konteks pendek = Ollama cepat
+        return array_slice($chunks, 0, 3);
     }
 
-    /**
-     * Cek apakah pertanyaan di luar scope peraturan DIY.
-     */
+    protected function prioritizePasal(array $chunks, string $question): array
+    {
+        if (! preg_match('/pasal\s*(\d+)/i', $question, $m)) {
+            return $chunks;
+        }
+
+        $n = $m[1];
+
+        usort($chunks, fn ($a, $b) => $this->pasalScore($b, $n) <=> $this->pasalScore($a, $n));
+
+        return $chunks;
+    }
+
+    protected function pasalScore(array $chunk, string $n): int
+    {
+        $content = $chunk['content'] ?? '';
+
+        $mentions = preg_match('/Pasal\s*'.$n.'\b/i', $content);
+        $onlyRef = preg_match('/dimaksud\s+dalam\s+Pasal\s*'.$n.'\b/i', $content);
+
+        if ($mentions && ! $onlyRef) {
+            return 2; // membuka pasal = isi substansi
+        }
+        if ($mentions) {
+            return 1; // hanya merujuk
+        }
+
+        return 0;
+    }
+
     protected function isOutOfScope(string $question): ?string
     {
         $keywords = config('jdih_prompts.out_of_scope_keywords', []);
@@ -158,7 +181,7 @@ class RagflowService
 
         foreach ($keywords as $keyword) {
             if (str_contains($questionLower, strtolower($keyword))) {
-                return $keyword; // kembalikan keyword yang terdeteksi
+                return $keyword;
             }
         }
 
@@ -166,19 +189,15 @@ class RagflowService
     }
 
     /**
-     * Tanya-jawab yang di-scope ke 1 dokumen: ambil chunk relevan dari
-     * RAGFlow, susun sebagai konteks, lalu minta LLM menjawab HANYA
-     * berdasarkan konteks itu. Pakai prompt template dari config.
+     * Tanya-jawab per dokumen: retrieval RAGFlow + generation Ollama lokal.
      */
     public function askDocument(string $documentId, string $question): string
     {
-        // === 1. Deteksi pertanyaan terlalu pendek / ambigu ===
         $minLength = config('jdih_prompts.min_question_length', 10);
         if (strlen(trim($question)) < $minLength) {
             return config('jdih_prompts.negative_responses.too_vague');
         }
 
-        // === 2. Deteksi pertanyaan di luar scope hukum ===
         $outOfScopeKeyword = $this->isOutOfScope($question);
         if ($outOfScopeKeyword) {
             return str_replace(
@@ -188,7 +207,6 @@ class RagflowService
             );
         }
 
-        // === 3. Retrieval chunks dari RAGFlow ===
         try {
             $chunks = $this->retrieveChunks($documentId, $question);
         } catch (\Exception $e) {
@@ -196,7 +214,6 @@ class RagflowService
             return config('jdih_prompts.negative_responses.technical_error');
         }
 
-        // === 4. Kalau tidak ada chunk relevan ===
         if (empty($chunks)) {
             return str_replace(
                 '{question}',
@@ -205,13 +222,11 @@ class RagflowService
             );
         }
 
-        // === 5. Susun konteks dari chunks ===
         $context = collect($chunks)
             ->pluck('content')
             ->filter()
             ->implode("\n\n---\n\n");
 
-        // === 6. Ambil prompt template dari config ===
         $systemPrompt = config('jdih_prompts.system');
         $userPrompt = str_replace(
             ['{context}', '{question}'],
@@ -219,37 +234,33 @@ class RagflowService
             config('jdih_prompts.user_template')
         );
 
-        // === 7. Panggil LLM (OpenRouter untuk sekarang) ===
-        foreach ($this->fallbackModels as $model) {
-            try {
-                $response = Http::withHeaders([
-                    'Authorization' => 'Bearer ' . $this->openrouterKey,
-                    'Content-Type' => 'application/json',
-                ])->timeout(60)->post("{$this->openrouterUrl}/chat/completions", [
-                    'model' => $model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => $userPrompt],
-                    ],
-                ]);
+        try {
+            $response = Http::timeout(280)->post("{$this->ollamaUrl}/api/generate", [
+                'model' => $this->ollamaModel,
+                'prompt' => $userPrompt,
+                'system' => $systemPrompt,
+                'stream' => false,
+                'options' => [
+                    'temperature' => 0.2,
+                    'num_predict' => 400,
+                    'num_ctx' => 3072,
+                ],
+            ]);
 
-                if ($response->successful()) {
-                    return $response->json('choices.0.message.content') ?? 'Tidak ada jawaban.';
-                }
-
-                Log::warning('Model OpenRouter gagal, coba fallback berikutnya', [
-                    'model' => $model,
-                    'status' => $response->status(),
-                ]);
-            } catch (\Exception $e) {
-                Log::error('Exception saat panggil OpenRouter', [
-                    'model' => $model,
-                    'error' => $e->getMessage(),
-                ]);
+            if ($response->successful()) {
+                return $response->json('response') ?? 'Tidak ada jawaban.';
             }
+
+            Log::error('Ollama gagal menjawab', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Exception saat panggil Ollama', [
+                'error' => $e->getMessage(),
+            ]);
         }
 
-        // === 8. Kalau semua model gagal ===
         return config('jdih_prompts.negative_responses.technical_error');
     }
 }
