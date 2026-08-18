@@ -1,9 +1,7 @@
 <?php
 
 use App\Http\Controllers\DocumentController;
-use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,20 +20,3 @@ Route::get('/documents/{dokumenHukum}', [DocumentController::class, 'show'])->na
 Route::get('/documents/{dokumenHukum}/pdf', [DocumentController::class, 'pdf'])->name('documents.pdf');
 Route::get('/documents/{dokumenHukum}/suggestions', [DocumentController::class, 'suggestions'])->name('documents.suggestions');
 Route::post('/documents/{dokumenHukum}/chat', [DocumentController::class, 'chat'])->name('documents.chat');
-
-/*
-|--------------------------------------------------------------------------
-| Bawaan starter kit
-|--------------------------------------------------------------------------
-*/
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
-
-require __DIR__.'/auth.php';
