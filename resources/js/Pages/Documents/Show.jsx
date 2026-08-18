@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import PdfViewer from '@/Components/PdfViewer';
 import ChatPanel from '@/Components/ChatPanel';
@@ -9,6 +9,9 @@ const JENIS_LABEL = {
     KEPGUB: 'Keputusan Gubernur',
 };
 
+const MIN_CHAT = 320;
+const DEFAULT_CHAT = 420;
+
 export default function Show({ document, assistant }) {
     const [page, setPage] = useState(1);
     const [highlight, setHighlight] = useState(null);
@@ -16,12 +19,24 @@ export default function Show({ document, assistant }) {
     const [chatOpen, setChatOpen] = useState(
         () => new URLSearchParams(window.location.search).get('chat') === '1'
     );
+    const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT);
+    const [isResizing, setIsResizing] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+    const dragging = useRef(false);
+
+    // Deteksi mobile responsive
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     const onCitation = (ref) => {
         if (!ref?.page) return;
         setHighlight(ref);
         setPage(ref.page);
-        if (window.innerWidth < 768) setChatOpen(false);
+        if (isMobile) setChatOpen(false);
     };
 
     const fmtLong = (t) =>
@@ -29,9 +44,46 @@ export default function Show({ document, assistant }) {
 
     const shortTitle = `${JENIS_LABEL[document.jenis] ?? document.jenis} No. ${document.nomor}/${document.tahun}`;
 
+    // ===== RESIZER dengan safety checks =====
+    const onPointerDown = (e) => {
+        e.preventDefault();
+        dragging.current = true;
+        setIsResizing(true);
+        
+        // Safety check untuk pointer capture
+        if (e.currentTarget?.setPointerCapture) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        }
+        
+        // Safety check untuk document.body
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'col-resize';
+        }
+    };
+
+    const onPointerMove = (e) => {
+        if (!dragging.current) return;
+        const max = Math.round(window.innerWidth * 0.75);
+        const w = window.innerWidth - e.clientX;
+        setChatWidth(Math.min(Math.max(w, MIN_CHAT), max));
+    };
+
+    const onPointerUp = () => {
+        if (!dragging.current) return;
+        dragging.current = false;
+        setIsResizing(false);
+        
+        // Safety check untuk document.body
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+    };
+
     return (
         <div className="flex h-screen flex-col bg-[#f5f7fa]">
-            {/* ===== SLIM HEADER: semua info dalam 1 baris ===== */}
+            {/* ===== SLIM HEADER (responsive) ===== */}
             <header className="relative z-30 border-b border-slate-200/70 bg-white shadow-sm">
                 <div className="flex items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
                     <Link
@@ -50,9 +102,8 @@ export default function Show({ document, assistant }) {
                         className="h-8 w-auto shrink-0 object-contain sm:h-9"
                     />
 
-                    <div className="h-6 w-px shrink-0 bg-slate-200"></div>
+                    <div className="h-6 w-px shrink-0 bg-slate-200 hidden sm:block"></div>
 
-                    {/* Identitas dokumen (truncate, lengkapnya di popover) */}
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                             <h1 className="truncate text-sm font-bold text-slate-900 sm:text-base">{shortTitle}</h1>
@@ -62,10 +113,9 @@ export default function Show({ document, assistant }) {
                                 {document.status}
                             </span>
                         </div>
-                        <p className="truncate text-xs text-slate-500" title={document.judul}>{document.judul}</p>
+                        <p className="truncate text-xs text-slate-500 hidden sm:block" title={document.judul}>{document.judul}</p>
                     </div>
 
-                    {/* Tombol Info */}
                     <button
                         onClick={() => setInfoOpen((v) => !v)}
                         title="Detail dokumen"
@@ -78,7 +128,6 @@ export default function Show({ document, assistant }) {
                         </svg>
                     </button>
 
-                    {/* Download */}
                     <a
                         href={`/documents/${document.id}/pdf`}
                         target="_blank"
@@ -91,11 +140,11 @@ export default function Show({ document, assistant }) {
                     </a>
                 </div>
 
-                {/* ===== POPOVER INFO: metadata lengkap ala web resmi ===== */}
+                {/* ===== POPOVER INFO ===== */}
                 {infoOpen && (
                     <>
                         <div className="fixed inset-0 z-30" onClick={() => setInfoOpen(false)} />
-                        <div className="absolute right-3 top-full z-40 mt-2 w-[min(92vw,400px)] rounded-2xl border border-slate-200 bg-white p-5 shadow-xl animate-[fadeIn_0.2s_ease-out]">
+                        <div className="absolute right-3 top-full z-40 mt-2 w-[min(92vw,400px)] animate-[fadeIn_0.2s_ease-out] rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between">
                                 <h3 className="text-sm font-bold text-slate-900">Detail Dokumen</h3>
                                 <button onClick={() => setInfoOpen(false)} className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
@@ -137,27 +186,49 @@ export default function Show({ document, assistant }) {
                 )}
             </header>
 
-            {/* ===== KONTEN: PDF dominan + chat ===== */}
+            {/* ===== KONTEN: PDF + RESIZER + CHAT (responsive) ===== */}
             <div className="flex flex-1 overflow-hidden">
                 <div className="min-w-0 flex-1">
                     <PdfViewer url={`/documents/${document.id}/pdf`} page={page} highlight={highlight} onPageChange={setPage} />
                 </div>
 
-                {/* Desktop: side panel chat */}
-                <div
-                    className="hidden md:block overflow-hidden border-l border-slate-200 bg-white transition-all duration-300 ease-in-out"
-                    style={{ width: chatOpen ? '420px' : '0' }}
-                >
-                    {chatOpen && (
-                        <div className="h-full w-[420px]">
-                            <ChatPanel documentId={document.id} onCitation={onCitation} onClose={() => setChatOpen(false)} assistant={assistant} />
+                {/* Desktop/Tablet: RESIZER + Chat side panel */}
+                {!isMobile && chatOpen && (
+                    <>
+                        <div
+                            onPointerDown={onPointerDown}
+                            onPointerMove={onPointerMove}
+                            onPointerUp={onPointerUp}
+                            onDoubleClick={() => setChatWidth(DEFAULT_CHAT)}
+                            title="Geser untuk atur ukuran • Klik 2x untuk reset"
+                            style={{ touchAction: 'none' }}
+                            className={`flex w-2 shrink-0 select-none items-center justify-center transition-colors ${
+                                isResizing ? 'bg-blue-500 cursor-col-resize' : 'bg-slate-200 hover:bg-blue-400 cursor-col-resize'
+                            }`}
+                        >
+                            <div className="flex flex-col gap-0.5">
+                                <span className="h-1 w-1 rounded-full bg-white/80"></span>
+                                <span className="h-1 w-1 rounded-full bg-white/80"></span>
+                                <span className="h-1 w-1 rounded-full bg-white/80"></span>
+                            </div>
                         </div>
-                    )}
-                </div>
+
+                        <div
+                            className={`overflow-hidden bg-white ${
+                                isResizing ? '' : 'transition-all duration-300 ease-in-out'
+                            }`}
+                            style={{ width: chatWidth }}
+                        >
+                            <div className="h-full" style={{ width: chatWidth }}>
+                                <ChatPanel documentId={document.id} onCitation={onCitation} onClose={() => setChatOpen(false)} assistant={assistant} />
+                            </div>
+                        </div>
+                    </>
+                )}
 
                 {/* Mobile: fullscreen drawer */}
-                {chatOpen && (
-                    <div className="md:hidden fixed inset-0 z-50 animate-[fadeIn_0.2s_ease-out] bg-white">
+                {isMobile && chatOpen && (
+                    <div className="fixed inset-0 z-50 animate-[fadeIn_0.2s_ease-out] bg-white">
                         <ChatPanel documentId={document.id} onCitation={onCitation} onClose={() => setChatOpen(false)} assistant={assistant} />
                     </div>
                 )}
