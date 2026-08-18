@@ -22,6 +22,47 @@ function ScalesIcon({ className }) {
 const nowTime = () =>
     new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
+/**
+ * Render teks jawaban dengan sitasi [1], [2], [3] inline sebagai badge clickable.
+ * Contoh: "Berdasarkan Pasal 5 [1] disebutkan bahwa..." 
+ *         → "Berdasarkan Pasal 5 <badge>1</badge> disebutkan bahwa..."
+ */
+function TextWithCitations({ text, refs, onCitation }) {
+    if (!text) return null;
+
+    // Regex untuk match [1], [2], [12], dll (1 atau 2 digit)
+    const citationRegex = /\[(\d{1,2})\]/g;
+    const parts = text.split(citationRegex);
+
+    return (
+        <>
+            {parts.map((part, idx) => {
+                // Bagian ganjil = angka sitasi, bagian genap = teks biasa
+                if (idx % 2 === 1) {
+                    const num = parseInt(part, 10);
+                    const ref = refs?.find((r) => r.id === num);
+
+                    if (ref) {
+                        return (
+                            <button
+                                key={idx}
+                                onClick={() => onCitation(ref)}
+                                title={`Lihat sumber halaman ${ref.page}`}
+                                className="mx-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-bold text-blue-950 shadow-sm transition hover:bg-amber-300 hover:scale-110 active:scale-95 align-super"
+                            >
+                                {num}
+                            </button>
+                        );
+                    }
+                    // Fallback: kalau ref tidak ditemukan, render sebagai teks biasa
+                    return <span key={idx} className="text-slate-400">[{part}]</span>;
+                }
+                return <span key={idx}>{part}</span>;
+            })}
+        </>
+    );
+}
+
 export default function ChatPanel({ documentId, onCitation, assistant, onClose }) {
     const a = { ...DEFAULT_ASSISTANT, ...(assistant || {}) };
 
@@ -65,6 +106,7 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
             if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
                 setSuggestions(data.suggestions);
             }
+            // Otomatis jump ke halaman sumber pertama
             if (data.references?.length) onCitation(data.references[0]);
         } catch (e) {
             const msg = e.response?.data?.answer ?? e.response?.data?.message ?? e.message;
@@ -121,28 +163,68 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
                                     <div className="max-w-none">
                                         <ReactMarkdown
                                             components={{
-                                                p: ({ children }) => <p className="mb-2 leading-relaxed last:mb-0">{children}</p>,
+                                                p: ({ children }) => (
+                                                    <p className="mb-2 leading-relaxed last:mb-0">{children}</p>
+                                                ),
                                                 strong: ({ children }) => <span className="font-bold text-blue-950">{children}</span>,
                                                 em: ({ children }) => <em className="italic text-slate-600">{children}</em>,
+                                                code: ({ children }) => (
+                                                    <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px] text-slate-700">{children}</code>
+                                                ),
+                                                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">{children}</ul>,
+                                                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">{children}</ol>,
                                             }}
                                         >
                                             {m.text}
                                         </ReactMarkdown>
+                                        
+                                        {/* UPGRADE: Inline citation badges [1], [2], [3] */}
+                                        {m.refs?.length > 0 && (
+                                            <div className="mt-1 text-[11px] sm:text-xs text-slate-600">
+                                                <TextWithCitations
+                                                    text={extractCitations(m.text)}
+                                                    refs={m.refs}
+                                                    onCitation={onCitation}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* UPGRADE: Section Referensi dengan snippet preview */}
+                                        {m.refs?.length > 0 && (
+                                            <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3">
+                                                <p className="text-[10px] sm:text-xs font-semibold text-slate-500 flex items-center gap-1">
+                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    Sumber dokumen ({m.refs.length}):
+                                                </p>
+                                                {m.refs.map((r) => (
+                                                    <button
+                                                        key={r.id}
+                                                        onClick={() => onCitation(r)}
+                                                        className="group flex w-full items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-left transition hover:border-amber-300 hover:bg-amber-50 active:scale-[0.99]"
+                                                    >
+                                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400 text-[10px] font-bold text-blue-950">
+                                                            {r.id}
+                                                        </span>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[11px] font-semibold text-blue-900">Halaman {r.page}</span>
+                                                                <svg className="h-3 w-3 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-amber-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                                </svg>
+                                                            </div>
+                                                            <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-600">
+                                                                {r.snippet}
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
-                                )}
-
-                                {m.refs?.length > 0 && (
-                                    <div className="mt-2 sm:mt-3 space-y-1 sm:space-y-1.5 border-t border-slate-200 pt-2">
-                                        <p className="text-[10px] sm:text-xs font-semibold text-slate-500">Referensi:</p>
-                                        {m.refs.map((r, j) => (
-                                            <button key={j} onClick={() => onCitation(r)}
-                                                    className="flex w-full items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 sm:px-3 py-1.5 sm:py-2 text-left text-[11px] sm:text-xs font-medium text-blue-900 transition hover:bg-blue-100 active:scale-[0.98]">
-                                                📄 Halaman {r.page} — lihat sumber
-                                            </button>
-                                        ))}
-                                    </div>
                                 )}
                             </div>
                             <span className="mt-1 px-1 text-[9px] sm:text-[10px] text-slate-400">{m.time}</span>
@@ -213,4 +295,18 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
             </div>
         </div>
     );
+}
+
+/**
+ * Helper: ekstrak bagian teks yang mengandung sitasi [n] dari jawaban.
+ * Kalau AI tidak pakai sitasi inline, tampilkan list referensi saja tanpa badge inline.
+ */
+function extractCitations(text) {
+    if (!text) return '';
+    // Cek apakah ada pola [n] di teks
+    if (/\[\d{1,2}\]/.test(text)) {
+        return text;
+    }
+    // Kalau tidak ada, kembalikan string kosong (section referensi tetap tampil)
+    return '';
 }

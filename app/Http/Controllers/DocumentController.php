@@ -80,13 +80,18 @@ class DocumentController extends Controller
         if (! $dokumenHukum->ragflow_document_id) {
             return response()->json([
                 'answer' => 'Dokumen ini belum selesai diproses di RAGFlow, coba lagi nanti.',
+                'references' => [],
             ], 422);
         }
 
-        $answer = $ragflow->askDocument(
+        // UPGRADE: askDocument sekarang return array ['answer' => string, 'references' => array]
+        $result = $ragflow->askDocument(
             $dokumenHukum->ragflow_document_id,
             $request->input('question')
         );
+
+        $answer = $result['answer'] ?? 'Tidak ada jawaban.';
+        $references = $result['references'] ?? [];
 
         $suggestions = [];
         try {
@@ -101,8 +106,10 @@ class DocumentController extends Controller
             $suggestions = [];
         }
 
+        // UPGRADE: Return structured response dengan answer + references
         return response()->json([
             'answer'      => $answer,
+            'references'  => $references,
             'suggestions' => $suggestions,
         ]);
     }

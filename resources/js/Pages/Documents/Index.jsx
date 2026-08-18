@@ -1,23 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from '@inertiajs/react';
 
-const PER_PAGE = 6; // grid 2x3
+const PER_PAGE = 6;
 
 const JENIS_LABEL = {
     PERGUB: 'Peraturan Gubernur',
     PERDA: 'Peraturan Daerah',
     KEPGUB: 'Keputusan Gubernur',
 };
-
-function ScalesIcon({ className }) {
-    return (
-        <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" />
-        </svg>
-    );
-}
 
 function DocIcon({ className }) {
     return (
@@ -77,7 +67,6 @@ export default function Index({ documents }) {
         return arr;
     }, [documents, query, tahun, jenis, status, urutan]);
 
-    // ===== Pagination 2x3 =====
     const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
     const safePage = Math.min(page, totalPages);
     const paged = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
@@ -96,7 +85,6 @@ export default function Index({ documents }) {
         setPage(1);
     };
 
-    // Highlight kata kunci pencarian di judul kartu
     const highlight = (text) => {
         const q = query.trim();
         if (!q) return text;
@@ -104,7 +92,7 @@ export default function Index({ documents }) {
         const parts = text.split(new RegExp(`(${safe})`, 'ig'));
         return parts.map((part, i) =>
             part.toLowerCase() === q.toLowerCase() ? (
-                <mark key={i} className="rounded bg-amber-200 px-0.5 text-slate-900">{part}</mark>
+                <mark key={i} className="rounded bg-amber-200 px-1 text-slate-900">{part}</mark>
             ) : (
                 part
             )
@@ -112,95 +100,104 @@ export default function Index({ documents }) {
     };
 
     const selectCls =
-        'mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-700 focus:border-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-100';
+        'mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 transition focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100';
 
     return (
-        <div className="min-h-screen bg-slate-100">
-            {/* ===== Navbar ===== */}
-            <nav className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur">
-                <div className="mx-auto flex max-w-7xl items-center justify-between px-3 py-3 sm:px-6">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-950 shadow">
-                            <ScalesIcon className="h-5 w-5 text-amber-400" />
-                        </div>
-                        <div>
-                            <h1 className="text-sm font-bold tracking-wide text-slate-900">JDIH DIY</h1>
-                            <p className="text-[11px] text-slate-500">Jaringan Dokumentasi & Informasi Hukum</p>
-                        </div>
-                    </div>
-                    <span className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700 sm:flex">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
-                        Asisten AI aktif
-                    </span>
+        <div className="min-h-screen bg-[#f5f7fa] text-slate-800">
+            {/* ===== HEADER: logo resmi saja (sudah berisi tulisan) ===== */}
+            <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/95 shadow-sm backdrop-blur">
+                <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+                    <img
+                        src="https://jdih.jogjaprov.go.id/icon.png"
+                        alt="JDIH Daerah Istimewa Yogyakarta"
+                        className="h-11 w-auto object-contain sm:h-14"
+                    />
                 </div>
-            </nav>
+            </header>
 
-            {/* ===== Panel pencarian ===== */}
-            <div className="mx-auto max-w-7xl px-3 pt-6 sm:px-6 sm:pt-10">
-                <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-slate-50 p-5 sm:p-8 lg:p-10 shadow-sm">
-                    <ScalesIcon className="pointer-events-none absolute -right-8 top-1/2 h-48 w-48 sm:h-64 sm:w-64 -translate-y-1/2 text-blue-950/5" />
+            {/* ===== PANEL PENCARIAN ===== */}
+            <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 sm:pt-12 lg:px-8">
+                <div className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white p-6 shadow-sm sm:p-10 lg:p-12">
+                    {/* Ilustrasi floating kanan */}
+                    <img
+                        src="/images/ilustrasi-cari.png"
+                        alt=""
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                        className="pointer-events-none absolute right-10 top-10 hidden w-56 lg:block xl:w-64"
+                    />
 
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs text-slate-500">
-                        <span>Beranda</span>
-                        <span className="text-slate-300">/</span>
-                        <span>Produk Hukum</span>
-                        <span className="text-slate-300">/</span>
-                        <span className="font-semibold text-slate-800">Peraturan Perundang-undangan</span>
+                    <div className="lg:pr-64 xl:pr-72">
+                        {/* Breadcrumb */}
+                        <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                            <span className="transition hover:text-blue-600">Beranda</span>
+                            <span className="text-slate-300">/</span>
+                            <span className="transition hover:text-blue-600">Produk Hukum</span>
+                            <span className="text-slate-300">/</span>
+                            <span className="font-semibold text-slate-900">Peraturan Perundang-undangan</span>
+                        </nav>
+
+                        <h2 className="mt-6 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                            Peraturan Perundang-undangan
+                        </h2>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
+                            Peraturan tertulis tentang norma hukum di wilayah Daerah Istimewa Yogyakarta
+                        </p>
+
+                        {/* Pencarian */}
+                        <div className="mt-9">
+                            <label htmlFor="q" className="block text-sm font-semibold text-slate-900">
+                                Pencarian
+                            </label>
+                            <input
+                                id="q"
+                                value={query}
+                                onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+                                placeholder="Ketik kata kunci"
+                                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm text-slate-800 placeholder-slate-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                            />
+                        </div>
+
+                        {/* Filter */}
+                        <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-900">Tahun</label>
+                                <select value={tahun} onChange={(e) => { setTahun(e.target.value); setPage(1); }} className={selectCls}>
+                                    {tahunList.map((t) => (
+                                        <option key={t} value={t}>{t === 'SEMUA' ? 'Semua tahun' : t}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-900">Kategori</label>
+                                <select value={jenis} onChange={(e) => { setJenis(e.target.value); setPage(1); }} className={selectCls}>
+                                    {jenisList.map((j) => (
+                                        <option key={j} value={j}>{j === 'SEMUA' ? 'Pilih kategori' : JENIS_LABEL[j] ?? j}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-900">Status</label>
+                                <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={selectCls}>
+                                    {statusList.map((s) => (
+                                        <option key={s} value={s}>{s === 'SEMUA' ? 'Pilih status' : s}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-900">Urutan</label>
+                                <select value={urutan} onChange={(e) => { setUrutan(e.target.value); setPage(1); }} className={selectCls}>
+                                    <option value="TERBARU">Terbaru</option>
+                                    <option value="TERLAMA">Terlama</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
-                    <h2 className="mt-4 sm:mt-6 text-xl sm:text-2xl font-bold text-slate-900">Peraturan Perundang-undangan</h2>
-                    <p className="mt-1 text-xs sm:text-sm text-slate-600">
-                        Peraturan tertulis tentang norma hukum di wilayah Daerah Istimewa Yogyakarta
-                    </p>
-
-                    <div className="mt-5 sm:mt-6 max-w-3xl">
-                        <label className="text-xs sm:text-sm font-semibold text-slate-800">Pencarian</label>
-                        <input
-                            value={query}
-                            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
-                            placeholder="Ketik kata kunci"
-                            className="mt-2 w-full rounded-lg sm:rounded-xl border border-slate-300 bg-white px-3 py-2.5 sm:px-4 sm:py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        />
-                    </div>
-
-                    <div className="mt-5 sm:mt-6 grid max-w-4xl grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <div>
-                            <label className="text-xs sm:text-sm font-semibold text-slate-800">Tahun</label>
-                            <select value={tahun} onChange={(e) => { setTahun(e.target.value); setPage(1); }} className={selectCls}>
-                                {tahunList.map((t) => (
-                                    <option key={t} value={t}>{t === 'SEMUA' ? 'Semua tahun' : t}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-xs sm:text-sm font-semibold text-slate-800">Kategori</label>
-                            <select value={jenis} onChange={(e) => { setJenis(e.target.value); setPage(1); }} className={selectCls}>
-                                {jenisList.map((j) => (
-                                    <option key={j} value={j}>{j === 'SEMUA' ? 'Pilih kategori' : JENIS_LABEL[j] ?? j}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-xs sm:text-sm font-semibold text-slate-800">Status</label>
-                            <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className={selectCls}>
-                                {statusList.map((s) => (
-                                    <option key={s} value={s}>{s === 'SEMUA' ? 'Pilih status' : s}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-xs sm:text-sm font-semibold text-slate-800">Urutan</label>
-                            <select value={urutan} onChange={(e) => { setUrutan(e.target.value); setPage(1); }} className={selectCls}>
-                                <option value="TERBARU">Terbaru</option>
-                                <option value="TERLAMA">Terlama</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="mt-5 sm:mt-7 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
+                    {/* Tombol aksi */}
+                    <div className="mt-9 flex flex-wrap items-center gap-3 lg:justify-end">
                         <button
                             onClick={() => document.getElementById('hasil')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="flex items-center justify-center gap-2 rounded-full bg-blue-950 px-6 sm:px-8 py-2.5 sm:py-3 text-sm font-semibold text-white shadow transition hover:bg-blue-900"
+                            className="flex items-center gap-2 rounded-full bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 active:scale-[0.98]"
                         >
                             Cari
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -209,125 +206,129 @@ export default function Index({ documents }) {
                         </button>
                         <button
                             onClick={reset}
-                            className="rounded-full border border-blue-950 px-6 sm:px-8 py-2.5 sm:py-3 text-sm font-semibold text-blue-950 transition hover:bg-blue-950/5"
+                            className="rounded-full border border-blue-600 bg-white px-8 py-3 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 active:scale-[0.98]"
                         >
                             Reset
                         </button>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            {/* ===== Hasil ===== */}
-            <main id="hasil" className="mx-auto max-w-7xl px-3 py-6 sm:px-6 sm:py-10">
-                <div className="rounded-2xl sm:rounded-3xl bg-blue-950/5 p-4 sm:p-6 lg:p-8">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-slate-800">Hasil Penelusuran</h3>
-                        <span className="text-[11px] sm:text-xs text-slate-500">{filtered.length} dokumen</span>
+            {/* ===== HASIL PENELUSURAN ===== */}
+            <main id="hasil" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+                <div className="rounded-3xl bg-[#e8f0fe] p-5 sm:p-8 lg:p-10">
+                    <div className="flex items-baseline justify-between px-1">
+                        <h3 className="text-lg font-bold text-slate-900">Hasil Penelusuran</h3>
+                        <span className="text-sm text-slate-500">{filtered.length} dokumen</span>
                     </div>
 
                     {filtered.length === 0 ? (
-                        <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white py-14 text-center text-sm text-slate-500">
-                            Tidak ada dokumen yang cocok dengan pencarian Anda.
+                        <div className="mt-6 rounded-2xl border-2 border-dashed border-slate-300 bg-white py-20 text-center">
+                            <p className="text-sm text-slate-500 sm:text-base">
+                                Tidak ada dokumen yang cocok dengan pencarian Anda.
+                            </p>
                         </div>
                     ) : (
                         <>
-                            <div className="mt-4 sm:mt-6 grid gap-4 sm:gap-5 grid-cols-1 md:grid-cols-2">
+                            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-7">
                                 {paged.map((d, i) => (
                                     <div
                                         key={d.id}
                                         style={{ animationDelay: `${i * 60}ms` }}
-                                        className="flex animate-[fadeIn_0.5s_ease-out_both] flex-col rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+                                        className="relative flex animate-[fadeIn_0.5s_ease-out_both] flex-col rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-7"
                                     >
-                                        <div className="flex items-start gap-3 sm:gap-4">
-                                            <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-lg sm:rounded-xl border border-slate-200 bg-slate-50">
-                                                <DocIcon className="h-6 w-6 sm:h-7 sm:w-7 text-blue-900" />
+                                        {/* Tanya AI: pojok kanan atas */}
+                                        <Link
+                                            href={`/documents/${d.id}?chat=1`}
+                                            title="Tanya Asisten AI"
+                                            className="absolute right-5 top-5 flex items-center gap-1.5 rounded-full bg-amber-400 px-3.5 py-1.5 text-xs font-bold text-blue-950 shadow-sm transition hover:bg-amber-300 active:scale-95"
+                                        >
+                                            <SparkleIcon className="h-3.5 w-3.5" />
+                                            Tanya AI
+                                        </Link>
+
+                                        <div className="flex items-start gap-4 pr-24">
+                                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50">
+                                                <DocIcon className="h-7 w-7 text-blue-600" />
                                             </div>
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="text-sm sm:text-base font-bold text-slate-900">
+                                            <div className="min-w-0">
+                                                <h4 className="text-base font-bold text-slate-900 sm:text-lg">
                                                     {d.nomor} Tahun {d.tahun}
-                                                    <span className="hidden sm:inline mx-2 text-slate-300">|</span>
-                                                    <span className="block sm:inline text-[11px] sm:text-sm font-semibold text-slate-500">{fmtShort(d.tanggal_penetapan)}</span>
+                                                    <span className="mx-2 text-slate-300">|</span>
+                                                    <span className="text-sm font-semibold text-slate-500">{fmtShort(d.tanggal_penetapan)}</span>
                                                 </h4>
-                                                <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                                    <span className="text-[11px] sm:text-sm text-slate-600">{JENIS_LABEL[d.jenis] ?? d.jenis}</span>
-                                                    <span className={`rounded-full px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-[11px] font-medium ${d.status === 'berlaku' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                    <span className="text-sm text-slate-600">{JENIS_LABEL[d.jenis] ?? d.jenis}</span>
+                                                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${d.status === 'berlaku' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
                                                         {d.status}
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <p className="mt-3 sm:mt-4 line-clamp-2 flex-1 text-xs sm:text-sm leading-relaxed text-slate-700">{highlight(d.judul)}</p>
+                                        <p className="mt-5 line-clamp-2 flex-1 text-sm leading-relaxed text-slate-600">
+                                            {highlight(d.judul)}
+                                        </p>
 
-                                        <div className="mt-4 sm:mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 sm:pt-4">
+                                        <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-5">
                                             <a
                                                 href={`/documents/${d.id}/pdf`}
                                                 target="_blank"
-                                                className="flex items-center gap-1 sm:gap-1.5 rounded-full bg-blue-950 px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-white transition hover:bg-blue-900"
+                                                className="flex items-center gap-1.5 rounded-full bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-700 active:scale-[0.98]"
                                             >
                                                 <span>Download</span>
-                                                <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0 4-4m-4 4-4-4M4 20h16" />
                                                 </svg>
                                             </a>
                                             <Link
                                                 href={`/documents/${d.id}`}
-                                                className="flex items-center gap-1 sm:gap-1.5 rounded-full border border-blue-950 px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-blue-950 transition hover:bg-blue-950/5"
+                                                className="flex items-center gap-1.5 rounded-full border border-blue-600 bg-white px-5 py-2.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 active:scale-[0.98]"
                                             >
                                                 <span>Selengkapnya</span>
-                                                <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                                 </svg>
-                                            </Link>
-                                            <Link
-                                                href={`/documents/${d.id}?chat=1`}
-                                                className="ml-auto flex items-center gap-1 sm:gap-1.5 rounded-full bg-amber-400 px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-blue-950 shadow-sm transition hover:bg-amber-300"
-                                                title="Tanya Asisten AI"
-                                            >
-                                                <SparkleIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                                                <span>Tanya AI</span>
                                             </Link>
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* ===== Pagination ===== */}
+                            {/* Pagination */}
                             {totalPages > 1 && (
-                                <div className="mt-6 sm:mt-8 flex items-center justify-center gap-1 sm:gap-1.5 overflow-x-auto pb-2">
+                                <div className="mt-10 flex items-center justify-center gap-1.5 overflow-x-auto pb-2">
                                     <button
                                         disabled={safePage === 1}
                                         onClick={() => goPage(safePage - 1)}
-                                        className="flex h-8 sm:h-9 items-center gap-1 rounded-full border border-slate-300 bg-white px-3 sm:px-4 text-[11px] sm:text-xs font-semibold text-slate-600 transition hover:border-blue-900 hover:text-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="flex h-10 items-center rounded-full border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-600 transition hover:border-blue-600 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         ← Prev
                                     </button>
-
                                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                                         <button
                                             key={p}
                                             onClick={() => goPage(p)}
-                                            className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full text-[11px] sm:text-xs font-bold transition ${
+                                            className={`h-10 w-10 rounded-full text-xs font-bold transition ${
                                                 p === safePage
-                                                    ? 'bg-blue-950 text-white shadow'
-                                                    : 'border border-slate-300 bg-white text-slate-600 hover:border-blue-900 hover:text-blue-900'
+                                                    ? 'bg-blue-600 text-white shadow'
+                                                    : 'border border-slate-300 bg-white text-slate-600 hover:border-blue-600 hover:text-blue-600'
                                             }`}
                                         >
                                             {p}
                                         </button>
                                     ))}
-
                                     <button
                                         disabled={safePage === totalPages}
                                         onClick={() => goPage(safePage + 1)}
-                                        className="flex h-8 sm:h-9 items-center gap-1 rounded-full border border-slate-300 bg-white px-3 sm:px-4 text-[11px] sm:text-xs font-semibold text-slate-600 transition hover:border-blue-900 hover:text-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+                                        className="flex h-10 items-center rounded-full border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-600 transition hover:border-blue-600 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         Next →
                                     </button>
                                 </div>
                             )}
 
-                            <p className="mt-2 sm:mt-3 text-center text-[10px] sm:text-[11px] text-slate-500">
+                            <p className="mt-4 text-center text-xs text-slate-500">
                                 Halaman {safePage} dari {totalPages} — menampilkan {paged.length} dari {filtered.length} dokumen
                             </p>
                         </>
@@ -335,18 +336,21 @@ export default function Index({ documents }) {
                 </div>
             </main>
 
-            <footer className="border-t border-slate-200 bg-white py-6 text-center text-[11px] sm:text-xs text-slate-500">
-                © {new Date().getFullYear()} JDIH DIY — Didukung asisten AI berbasis RAGFlow
+            {/* ===== FOOTER ===== */}
+            <footer className="border-t border-slate-200 bg-white py-8 text-center">
+                <p className="text-sm text-slate-500">
+                    © {new Date().getFullYear()} JDIH DIY — Didukung asisten AI berbasis RAGFlow
+                </p>
             </footer>
 
-            {/* ===== Tombol kembali ke atas ===== */}
+            {/* Tombol kembali ke atas */}
             {showTop && (
                 <button
                     onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
                     title="Kembali ke atas"
-                    className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex h-10 w-10 sm:h-11 sm:w-11 animate-[fadeIn_0.3s_ease-out] items-center justify-center rounded-full bg-blue-950 text-white shadow-lg transition hover:bg-blue-900 active:scale-95"
+                    className="fixed bottom-6 right-6 z-40 flex h-12 w-12 animate-[fadeIn_0.3s_ease-out] items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700 active:scale-95"
                 >
-                    <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                     </svg>
                 </button>

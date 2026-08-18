@@ -104,6 +104,8 @@ class RagflowService
     /**
      * Retrieval chunk dari RAGFlow, di-rerank: chunk yang MEMBUKA pasal
      * yang ditanya diprioritaskan. top_k = 12 biar pasal yang benar ikut masuk.
+     * 
+     * UPGRADE: Return metadata lengkap untuk sitasi (page, chunk_id, snippet)
      */
     public function retrieveChunks(string $documentId, string $question, int $topK = 12): array
     {
@@ -140,8 +142,16 @@ class RagflowService
         }
         Log::info('Top chunks setelah rerank: ', $previews);
 
-        // 3 chunk terbaik saja biar konteks pendek = Ollama cepat
-        return array_slice($chunks, 0, 3);
+        // UPGRADE: Return 3 chunk terbaik dengan metadata lengkap untuk sitasi
+        return array_map(function ($chunk) {
+            return [
+                'content' => $chunk['content'] ?? '',
+                'page' => $chunk['page_num'] ?? $chunk['page'] ?? null,
+                'chunk_id' => $chunk['chunk_id'] ?? $chunk['id'] ?? null,
+                'document_name' => $chunk['document_name'] ?? null,
+                'similarity' => $chunk['similarity'] ?? null,
+            ];
+        }, array_slice($chunks, 0, 3));
     }
 
     protected function prioritizePasal(array $chunks, string $question): array
@@ -190,36 +200,50 @@ class RagflowService
 
     /**
      * Tanya-jawab per dokumen: retrieval RAGFlow + generation Ollama lokal.
+     * 
+     * UPGRADE: Return structured response dengan answer + references array
      */
-    public function askDocument(string $documentId, string $question): string
+    public function askDocument(string $documentId, string $question): array
     {
         $minLength = config('jdih_prompts.min_question_length', 10);
         if (strlen(trim($question)) < $minLength) {
-            return config('jdih_prompts.negative_responses.too_vague');
+            return [
+                'answer' => config('jdih_prompts.negative_responses.too_vague'),
+                'references' => [],
+            ];
         }
 
         $outOfScopeKeyword = $this->isOutOfScope($question);
         if ($outOfScopeKeyword) {
-            return str_replace(
-                '{topic}',
-                $outOfScopeKeyword,
-                config('jdih_prompts.negative_responses.out_of_scope')
-            );
+            return [
+                'answer' => str_replace(
+                    '{topic}',
+                    $outOfScopeKeyword,
+                    config('jdih_prompts.negative_responses.out_of_scope')
+                ),
+                'references' => [],
+            ];
         }
 
         try {
             $chunks = $this->retrieveChunks($documentId, $question);
         } catch (\Exception $e) {
             Log::error('Error saat retrieval', ['exception' => $e->getMessage()]);
-            return config('jdih_prompts.negative_responses.technical_error');
+            return [
+                'answer' => config('jdih_prompts.negative_responses.technical_error'),
+                'references' => [],
+            ];
         }
 
         if (empty($chunks)) {
-            return str_replace(
-                '{question}',
-                $question,
-                config('jdih_prompts.negative_responses.no_context')
-            );
+            return [
+                'answer' => str_replace(
+                    '{question}',
+                    $question,
+                    config('jdih_prompts.negative_responses.no_context')
+                ),
+                'references' => [],
+            ];
         }
 
         $context = collect($chunks)
@@ -248,7 +272,22 @@ class RagflowService
             ]);
 
             if ($response->successful()) {
-                return $response->json('response') ?? 'Tidak ada jawaban.';
+                $answer = $response->json('response') ?? 'Tidak ada jawaban.';
+                
+                // UPGRADE: Build references array dengan nomor urut
+                $references = array_map(function ($chunk, $index) {
+                    return [
+                        'id' => $index + 1, // [1], [2], [3]
+                        'page' => $chunk['page'],
+                        'chunk_id' => $chunk['chunk_id'],
+                        'snippet' => substr($chunk['content'], 0, 150) . '...',
+                    ];
+                }, $chunks, array_keys($chunks));
+                
+                return [
+                    'answer' => $answer,
+                    'references' => $references,
+                ];
             }
 
             Log::error('Ollama gagal menjawab', [
@@ -261,6 +300,9 @@ class RagflowService
             ]);
         }
 
-        return config('jdih_prompts.negative_responses.technical_error');
+        return [
+            'answer' => config('jdih_prompts.negative_responses.technical_error'),
+            'references' => [],
+        ];
     }
 }

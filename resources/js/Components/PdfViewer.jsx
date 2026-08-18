@@ -41,12 +41,26 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
             canvas.width = vp.width;
             await p.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
 
-            setBox(highlight && highlight.page === page ? {
-                left: highlight.x0 * vp.scale,
-                top: highlight.y0 * vp.scale,
-                width: (highlight.x1 - highlight.x0) * vp.scale,
-                height: (highlight.y1 - highlight.y0) * vp.scale,
-            } : null);
+            if (highlight && highlight.page === page) {
+                if (highlight.x0 !== undefined && highlight.y0 !== undefined &&
+                    highlight.x1 !== undefined && highlight.y1 !== undefined) {
+                    setBox({
+                        left: highlight.x0 * vp.scale,
+                        top: highlight.y0 * vp.scale,
+                        width: (highlight.x1 - highlight.x0) * vp.scale,
+                        height: (highlight.y1 - highlight.y0) * vp.scale,
+                    });
+                } else {
+                    setBox({
+                        left: vp.width * 0.1,
+                        top: vp.height * 0.3,
+                        width: vp.width * 0.8,
+                        height: vp.height * 0.4,
+                    });
+                }
+            } else {
+                setBox(null);
+            }
         });
     }, [page, highlight, numPages, ready]);
 
@@ -57,23 +71,39 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
     }, [box]);
 
     return (
-        <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between bg-gray-800 px-4 py-2 text-sm text-white">
-                <span>Halaman: {page} / {numPages || '…'}</span>
-                <div className="flex gap-2">
-                    <button disabled={page <= 1} onClick={() => onPageChange(page - 1)}
-                            className="rounded bg-gray-700 px-2 py-1 disabled:opacity-40">← Prev</button>
-                    <button disabled={page >= numPages} onClick={() => onPageChange(page + 1)}
-                            className="rounded bg-gray-700 px-2 py-1 disabled:opacity-40">Next →</button>
+        <div className="flex h-full flex-col bg-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
+                <span className="text-sm text-slate-600">
+                    Halaman <span className="font-bold text-blue-600">{page}</span>
+                    <span className="mx-1 text-slate-300">/</span>
+                    {numPages || '…'}
+                </span>
+                <div className="flex items-center gap-2">
+                    <button
+                        disabled={page <= 1}
+                        onClick={() => onPageChange(page - 1)}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-600 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        ← Prev
+                    </button>
+                    <button
+                        disabled={page >= numPages}
+                        onClick={() => onPageChange(page + 1)}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-600 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        Next →
+                    </button>
                 </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-auto bg-gray-200 p-4">
+            <div ref={scrollRef} className="flex-1 overflow-auto p-4 sm:p-6">
                 <div className="relative mx-auto w-fit">
-                    <canvas ref={canvasRef} className="shadow-lg" />
+                    <canvas ref={canvasRef} className="rounded-sm shadow-lg" />
                     {box && (
-                        <div className="pointer-events-none absolute animate-pulse border-2 border-yellow-500 bg-yellow-300/40"
-                             style={{ left: box.left, top: box.top, width: box.width, height: box.height }} />
+                        <div
+                            className="pointer-events-none absolute animate-pulse rounded border-4 border-amber-400 bg-amber-300/30 shadow-lg"
+                            style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+                        />
                     )}
                 </div>
             </div>
