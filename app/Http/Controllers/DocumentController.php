@@ -84,6 +84,12 @@ class DocumentController extends Controller
             ], 422);
         }
 
+        // BARU: simpan pesan user ke database
+        $dokumenHukum->chatMessages()->create([
+            'role' => 'user',
+            'message' => $request->input('question'),
+        ]);
+
         // UPGRADE: askDocument sekarang return array ['answer' => string, 'references' => array]
         $result = $ragflow->askDocument(
             $dokumenHukum->ragflow_document_id,
@@ -106,12 +112,29 @@ class DocumentController extends Controller
             $suggestions = [];
         }
 
+        // BARU: simpan jawaban AI ke database
+        $dokumenHukum->chatMessages()->create([
+            'role' => 'ai',
+            'message' => $answer,
+            'references' => $references,
+        ]);
+
         // UPGRADE: Return structured response dengan answer + references
         return response()->json([
             'answer'      => $answer,
             'references'  => $references,
             'suggestions' => $suggestions,
         ]);
+    }
+
+    // BARU: ambil riwayat chat untuk suatu dokumen
+    public function history(DokumenHukum $dokumenHukum)
+    {
+        $messages = $dokumenHukum->chatMessages()
+            ->orderBy('created_at')
+            ->get(['id', 'role', 'message', 'references', 'created_at']);
+
+        return response()->json(['messages' => $messages]);
     }
 
     public function suggestions(DokumenHukum $dokumenHukum)

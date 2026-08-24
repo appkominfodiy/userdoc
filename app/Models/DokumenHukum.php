@@ -29,4 +29,9 @@ class DokumenHukum extends Model
         'tanggal_penetapan' => 'date',
         'last_synced_at' => 'datetime',
     ];
+
+    public function chatMessages()
+    {
+        return $this->hasMany(ChatMessage::class);
+    }
 }

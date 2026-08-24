@@ -66,13 +66,34 @@ function TextWithCitations({ text, refs, onCitation }) {
 export default function ChatPanel({ documentId, onCitation, assistant, onClose }) {
     const a = { ...DEFAULT_ASSISTANT, ...(assistant || {}) };
 
-    const [messages, setMessages] = useState([{ role: 'ai', text: a.greeting, time: nowTime() }]);
+        const [messages, setMessages] = useState([{ role: 'ai', text: a.greeting, time: nowTime() }]);
     const [suggestions, setSuggestions] = useState(a.suggested || []);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const endRef = useRef(null);
     const fetchedWelcome = useRef(false);
+    const fetchedHistory = useRef(false);
+
+    // BARU: ambil riwayat chat tersimpan saat komponen dibuka
+    useEffect(() => {
+        if (fetchedHistory.current) return;
+        fetchedHistory.current = true;
+
+        axios.get(`/documents/${documentId}/history`)
+            .then(({ data }) => {
+                if (Array.isArray(data.messages) && data.messages.length > 0) {
+                    const restored = data.messages.map((m) => ({
+                        role: m.role,
+                        text: m.message,
+                        refs: m.references ?? [],
+                        time: new Date(m.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                    }));
+                    setMessages(restored);
+                }
+            })
+            .catch(() => {});
+    }, [documentId]);
 
     useEffect(() => {
         if (fetchedWelcome.current) return;

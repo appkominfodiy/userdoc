@@ -11,15 +11,18 @@ const JENIS_LABEL = {
 
 const MIN_CHAT = 320;
 const DEFAULT_CHAT = 420;
+const MIN_CHAT_HEIGHT = 220;
+const DEFAULT_CHAT_HEIGHT = 320;
 
 export default function Show({ document, assistant }) {
     const [page, setPage] = useState(1);
     const [highlight, setHighlight] = useState(null);
     const [infoOpen, setInfoOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(
-        () => new URLSearchParams(window.location.search).get('chat') === '1'
+        () => new URLSearchParams(window.location.search).get('chat') !== '0'
     );
     const [chatWidth, setChatWidth] = useState(DEFAULT_CHAT);
+    const [chatHeight, setChatHeight] = useState(DEFAULT_CHAT_HEIGHT);
     const [isResizing, setIsResizing] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const dragging = useRef(false);
@@ -36,7 +39,6 @@ export default function Show({ document, assistant }) {
         if (!ref?.page) return;
         setHighlight(ref);
         setPage(ref.page);
-        if (isMobile) setChatOpen(false);
     };
 
     const fmtLong = (t) =>
@@ -44,18 +46,14 @@ export default function Show({ document, assistant }) {
 
     const shortTitle = `${JENIS_LABEL[document.jenis] ?? document.jenis} No. ${document.nomor}/${document.tahun}`;
 
-    // ===== RESIZER dengan safety checks =====
+    // ===== RESIZER HORIZONTAL (desktop) dengan safety checks =====
     const onPointerDown = (e) => {
         e.preventDefault();
         dragging.current = true;
         setIsResizing(true);
-        
-        // Safety check untuk pointer capture
         if (e.currentTarget?.setPointerCapture) {
             e.currentTarget.setPointerCapture(e.pointerId);
         }
-        
-        // Safety check untuk document.body
         if (typeof document !== 'undefined' && document.body) {
             document.body.style.userSelect = 'none';
             document.body.style.cursor = 'col-resize';
@@ -69,12 +67,31 @@ export default function Show({ document, assistant }) {
         setChatWidth(Math.min(Math.max(w, MIN_CHAT), max));
     };
 
+    // ===== RESIZER VERTIKAL (mobile) =====
+    const onPointerDownMobile = (e) => {
+        e.preventDefault();
+        dragging.current = true;
+        setIsResizing(true);
+        if (e.currentTarget?.setPointerCapture) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        }
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'row-resize';
+        }
+    };
+
+    const onPointerMoveMobile = (e) => {
+        if (!dragging.current) return;
+        const max = Math.round(window.innerHeight * 0.75);
+        const h = window.innerHeight - e.clientY;
+        setChatHeight(Math.min(Math.max(h, MIN_CHAT_HEIGHT), max));
+    };
+
     const onPointerUp = () => {
         if (!dragging.current) return;
         dragging.current = false;
         setIsResizing(false);
-        
-        // Safety check untuk document.body
         if (typeof document !== 'undefined' && document.body) {
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
@@ -128,7 +145,8 @@ export default function Show({ document, assistant }) {
                         </svg>
                     </button>
 
-                    <a
+                    
+                        <a
                         href={`/documents/${document.id}/pdf`}
                         target="_blank"
                         className="flex shrink-0 items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.98] sm:px-5"
@@ -187,12 +205,12 @@ export default function Show({ document, assistant }) {
             </header>
 
             {/* ===== KONTEN: PDF + RESIZER + CHAT (responsive) ===== */}
-            <div className="flex flex-1 overflow-hidden">
-                <div className="min-w-0 flex-1">
+            <div className={`flex flex-1 overflow-hidden ${isMobile ? 'flex-col' : 'flex-row'}`}>
+                <div className="min-h-0 min-w-0 flex-1">
                     <PdfViewer url={`/documents/${document.id}/pdf`} page={page} highlight={highlight} onPageChange={setPage} />
                 </div>
 
-                {/* Desktop/Tablet: RESIZER + Chat side panel */}
+                {/* Desktop/Tablet: RESIZER horizontal + Chat side panel */}
                 {!isMobile && chatOpen && (
                     <>
                         <div
@@ -226,11 +244,36 @@ export default function Show({ document, assistant }) {
                     </>
                 )}
 
-                {/* Mobile: fullscreen drawer */}
+                {/* Mobile: SPLIT VIEW vertikal (PDF atas, Chat bawah, resizable) */}
                 {isMobile && chatOpen && (
-                    <div className="fixed inset-0 z-50 animate-[fadeIn_0.2s_ease-out] bg-white">
-                        <ChatPanel documentId={document.id} onCitation={onCitation} onClose={() => setChatOpen(false)} assistant={assistant} />
-                    </div>
+                    <>
+                        <div
+                            onPointerDown={onPointerDownMobile}
+                            onPointerMove={onPointerMoveMobile}
+                            onPointerUp={onPointerUp}
+                            onDoubleClick={() => setChatHeight(DEFAULT_CHAT_HEIGHT)}
+                            title="Geser untuk atur ukuran"
+                            style={{ touchAction: 'none' }}
+                            className={`flex h-2 shrink-0 select-none items-center justify-center transition-colors ${
+                                isResizing ? 'bg-blue-500 cursor-row-resize' : 'bg-slate-200 cursor-row-resize'
+                            }`}
+                        >
+                            <div className="flex gap-0.5">
+                                <span className="h-1 w-1 rounded-full bg-white/80"></span>
+                                <span className="h-1 w-1 rounded-full bg-white/80"></span>
+                                <span className="h-1 w-1 rounded-full bg-white/80"></span>
+                            </div>
+                        </div>
+
+                        <div
+                            className={`shrink-0 overflow-hidden bg-white ${
+                                isResizing ? '' : 'transition-all duration-300 ease-in-out'
+                            }`}
+                            style={{ height: chatHeight }}
+                        >
+                            <ChatPanel documentId={document.id} onCitation={onCitation} onClose={() => setChatOpen(false)} assistant={assistant} />
+                        </div>
+                    </>
                 )}
             </div>
 
