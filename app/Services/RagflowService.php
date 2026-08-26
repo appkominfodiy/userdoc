@@ -104,7 +104,7 @@ class RagflowService
     /**
      * Retrieval chunk dari RAGFlow, di-rerank: chunk yang MEMBUKA pasal
      * yang ditanya diprioritaskan. top_k = 12 biar pasal yang benar ikut masuk.
-     * 
+     *
      * UPGRADE: Return metadata lengkap untuk sitasi (page, chunk_id, snippet)
      */
     public function retrieveChunks(string $documentId, string $question, int $topK = 12): array
@@ -200,7 +200,7 @@ class RagflowService
 
     /**
      * Tanya-jawab per dokumen: retrieval RAGFlow + generation Ollama lokal.
-     * 
+     *
      * UPGRADE: Return structured response dengan answer + references array
      */
     public function askDocument(string $documentId, string $question): array
@@ -258,22 +258,44 @@ class RagflowService
             config('jdih_prompts.user_template')
         );
 
+        // UPGRADE: gabung system + user prompt jadi satu string.
+        // Model kecil (qwen3.5:4b) lebih konsisten mengikuti instruksi
+        // kalau semuanya jadi satu prompt, dibanding pakai parameter
+        // 'system' terpisah yang kadang "bocor" jadi bagian jawaban.
+        $combinedPrompt = $systemPrompt . "\n\n" . $userPrompt . "\n\n/no_think";
+
+        // DEBUG SEMENTARA
+        Log::info('DEBUG askDocument sebelum panggil Ollama', [
+            'model' => $this->ollamaModel,
+            'ollama_url' => $this->ollamaUrl,
+            'context_length_chars' => strlen($context),
+            'combined_prompt_length_chars' => strlen($combinedPrompt),
+        ]);
+
         try {
             $response = Http::timeout(280)->post("{$this->ollamaUrl}/api/generate", [
                 'model' => $this->ollamaModel,
-                'prompt' => $userPrompt,
-                'system' => $systemPrompt,
+                'prompt' => $combinedPrompt,
                 'stream' => false,
+                'think' => false,
                 'options' => [
                     'temperature' => 0.2,
-                    'num_predict' => 400,
-                    'num_ctx' => 3072,
+                    'num_predict' => 800,
+                    'num_ctx' => 8192,
                 ],
+            ]);
+
+            // DEBUG SEMENTARA
+            Log::info('DEBUG askDocument respons mentah Ollama', [
+                'status' => $response->status(),
+                'successful' => $response->successful(),
+                'done_reason' => $response->json('done_reason'),
+                'response_text' => $response->json('response'),
             ]);
 
             if ($response->successful()) {
                 $answer = $response->json('response') ?? 'Tidak ada jawaban.';
-                
+
                 // UPGRADE: Build references array dengan nomor urut
                 $references = array_map(function ($chunk, $index) {
                     return [
@@ -283,7 +305,7 @@ class RagflowService
                         'snippet' => substr($chunk['content'], 0, 150) . '...',
                     ];
                 }, $chunks, array_keys($chunks));
-                
+
                 return [
                     'answer' => $answer,
                     'references' => $references,
