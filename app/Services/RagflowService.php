@@ -59,16 +59,29 @@ class RagflowService
 
     public function uploadDocument(string $datasetId, string $pdfUrl, string $fileName): ?string
     {
-        $pdfResponse = Http::timeout(180)->connectTimeout(20)->retry(2, 2000)->get($pdfUrl);
+        $tempFile = tempnam(sys_get_temp_dir(), 'jdih_pdf_');
+        
+        $pdfResponse = Http::timeout(180)->connectTimeout(20)->retry(2, 2000)
+            ->withOptions(['sink' => $tempFile])
+            ->get($pdfUrl);
 
         if (! $pdfResponse->successful()) {
             Log::error('Gagal download PDF', ['url' => $pdfUrl, 'status' => $pdfResponse->status()]);
+            @unlink($tempFile);
             return null;
         }
 
+        $fileStream = fopen($tempFile, 'r');
+
         $response = Http::withHeaders($this->headers())
-            ->attach('file', $pdfResponse->body(), $fileName)
+            ->timeout(300)
+            ->attach('file', $fileStream, $fileName)
             ->post("{$this->baseUrl}/api/v1/datasets/{$datasetId}/documents");
+
+        if (is_resource($fileStream)) {
+            fclose($fileStream);
+        }
+        @unlink($tempFile);
 
         if (! $response->successful()) {
             Log::error('Gagal upload dokumen ke RAGFlow', [
@@ -203,12 +216,24 @@ class RagflowService
      *
      * UPGRADE: Return structured response dengan answer + references array
      */
-    public function askDocument(string $documentId, string $question): array
+    public function askDocument(\App\Models\DokumenHukum $dokumen, string $question): array
     {
-        $minLength = config('jdih_prompts.min_question_length', 10);
-        if (strlen(trim($question)) < $minLength) {
+        $documentId = $dokumen->ragflow_document_id;
+        
+        // Cek jika hanya sapaan singkat (Fast bypass)
+        $cleanQuestion = strtolower(trim(preg_replace('/[^a-z0-9 ]/i', '', $question)));
+        $greetings = ['halo', 'hai', 'hi', 'selamat pagi', 'selamat siang', 'selamat sore', 'selamat malam', 'pagi', 'siang', 'sore', 'malam', 'hello', 'ping', 'tes', 'test', 'halo admin', 'hai admin'];
+        
+        if (in_array($cleanQuestion, $greetings)) {
+            $responses = [
+                "Halo! 👋 Ada yang bisa saya bantu terkait isi dokumen ini?",
+                "Hai! Monggo, apa ada pertanyaan tentang peraturan yang sedang Anda baca?",
+                "Halo! Selamat datang. Ada pasal atau kalimat yang ingin saya jelaskan?",
+                "Hai Bapak/Ibu! Silakan tanyakan apa saja seputar dokumen ini, saya siap membantu.",
+                "Halo! Monggo, mau tanya soal apa nih di peraturan ini?"
+            ];
             return [
-                'answer' => config('jdih_prompts.negative_responses.too_vague'),
+                'answer' => $responses[array_rand($responses)],
                 'references' => [],
             ];
         }
@@ -235,21 +260,20 @@ class RagflowService
             ];
         }
 
-        if (empty($chunks)) {
-            return [
-                'answer' => str_replace(
-                    '{question}',
-                    $question,
-                    config('jdih_prompts.negative_responses.no_context')
-                ),
-                'references' => [],
-            ];
-        }
+        $metadata = "INFORMASI DOKUMEN SAAT INI:\n"
+                  . "- Judul: {$dokumen->judul}\n"
+                  . "- Jenis: {$dokumen->jenis}\n"
+                  . "- Nomor/Tahun: {$dokumen->nomor} Tahun {$dokumen->tahun}\n"
+                  . "- Status: {$dokumen->status}\n\n";
 
-        $context = collect($chunks)
-            ->pluck('content')
-            ->filter()
-            ->implode("\n\n---\n\n");
+        if (empty($chunks)) {
+            $context = $metadata . "*(Tidak ada cuplikan teks spesifik dari dokumen yang relevan ditemukan untuk pertanyaan ini. Jawab berdasarkan informasi dokumen di atas saja.)*";
+        } else {
+            $context = $metadata . collect($chunks)
+                ->pluck('content')
+                ->filter()
+                ->implode("\n\n---\n\n");
+        }
 
         $systemPrompt = config('jdih_prompts.system');
         $userPrompt = str_replace(
