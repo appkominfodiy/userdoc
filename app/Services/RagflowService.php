@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -12,15 +13,17 @@ class RagflowService
     protected string $datasetName = 'jdih_public';
 
     protected string $ollamaUrl;
-    protected string $ollamaModel;
+    protected $ollamaModel;
+    protected $ollamaFastModel;
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.ragflow.base_url'), '/');
-        $this->apiKey = config('services.ragflow.api_key');
-
-        $this->ollamaUrl = rtrim(config('jdih_prompts.ollama.base_url', 'http://localhost:11434'), '/');
-        $this->ollamaModel = config('jdih_prompts.ollama.model', 'qwen2.5:3b');
+        $this->baseUrl = rtrim(env('RAGFLOW_BASE_URL'), '/');
+        $this->apiKey = env('RAGFLOW_API_KEY');
+        
+        $this->ollamaUrl = rtrim(config('jdih_prompts.ollama.base_url', 'http://100.65.5.110:11434'), '/');
+        $this->ollamaModel = config('jdih_prompts.ollama.model', 'qwen3.5:4b');
+        $this->ollamaFastModel = config('jdih_prompts.ollama.fast_model', 'qwen2.5:1.5b');
     }
 
     protected function headers(): array
@@ -120,7 +123,7 @@ class RagflowService
      *
      * UPGRADE: Return metadata lengkap untuk sitasi (page, chunk_id, snippet)
      */
-    public function retrieveChunks(string $documentId, string $question, int $topK = 12): array
+    public function retrieveChunks(string $documentId, string $question, int $topK = 30): array
     {
         $datasetId = $this->ensureDataset();
 
@@ -157,9 +160,24 @@ class RagflowService
 
         // UPGRADE: Return 3 chunk terbaik dengan metadata lengkap untuk sitasi
         return array_map(function ($chunk) {
+            $page = $chunk['page_num'] ?? $chunk['page'] ?? null;
+            if (!$page && !empty($chunk['positions'])) {
+                foreach ($chunk['positions'] as $pos) {
+                    $parts = is_string($pos) ? explode("\t", $pos) : (is_array($pos) ? $pos : []);
+                    if (isset($parts[0]) && is_numeric($parts[0])) {
+                        $page = (int) $parts[0];
+                        break;
+                    } elseif (is_numeric($pos)) {
+                        $page = (int) $pos;
+                        break;
+                    }
+                }
+            }
+
             return [
                 'content' => $chunk['content'] ?? '',
-                'page' => $chunk['page_num'] ?? $chunk['page'] ?? null,
+                'page' => $page,
+                'positions' => $chunk['positions'] ?? [],
                 'chunk_id' => $chunk['chunk_id'] ?? $chunk['id'] ?? null,
                 'document_name' => $chunk['document_name'] ?? null,
                 'similarity' => $chunk['similarity'] ?? null,
@@ -184,14 +202,24 @@ class RagflowService
     {
         $content = $chunk['content'] ?? '';
 
-        $mentions = preg_match('/Pasal\s*'.$n.'\b/i', $content);
-        $onlyRef = preg_match('/dimaksud\s+dalam\s+Pasal\s*'.$n.'\b/i', $content);
+        // Deteksi apakah "Pasal X" ada di awal baris (bisa ada spasi sebelumnya)
+        $isOpening = preg_match('/^\s*Pasal\s*'.$n.'\b/im', $content);
 
-        if ($mentions && ! $onlyRef) {
-            return 2; // membuka pasal = isi substansi
+        // Deteksi apakah ini sekadar rujukan ke pasal X
+        $isReferencing = preg_match('/(dimaksud\s+(dalam|pada)|ketentuan|diatur\s+(dalam|pada)|berdasarkan|sesuai\s+(dengan)?)\s+pasal\s*'.$n.'\b/i', $content);
+
+        if ($isOpening) {
+            return 100; // Sangat relevan, ini adalah deklarasi pasal
         }
+
+        $mentions = preg_match('/Pasal\s*'.$n.'\b/i', $content);
+
+        if ($mentions && ! $isReferencing) {
+            return 10; // Menyebut pasal tapi bukan sekadar rujukan (mungkin teks lanjutannya)
+        }
+        
         if ($mentions) {
-            return 1; // hanya merujuk
+            return 1; // Hanya merujuk pasal
         }
 
         return 0;
@@ -250,105 +278,252 @@ class RagflowService
             ];
         }
 
-        try {
-            $chunks = $this->retrieveChunks($documentId, $question);
-        } catch (\Exception $e) {
-            Log::error('Error saat retrieval', ['exception' => $e->getMessage()]);
+        $cacheKey = 'chat_doc_' . $dokumen->id . '_q_' . md5($cleanQuestion);
+
+        return Cache::remember($cacheKey, 86400, function () use ($dokumen, $documentId, $question) {
+            try {
+                $chunks = $this->retrieveChunks($documentId, $question);
+            } catch (\Exception $e) {
+                Log::error('Error saat retrieval', ['exception' => $e->getMessage()]);
+                return [
+                    'answer' => config('jdih_prompts.negative_responses.technical_error'),
+                    'references' => [],
+                ];
+            }
+
+            $metadata = "INFORMASI DOKUMEN SAAT INI:\n"
+                      . "- Judul: {$dokumen->judul}\n"
+                      . "- Jenis: {$dokumen->jenis}\n"
+                      . "- Nomor/Tahun: {$dokumen->nomor} Tahun {$dokumen->tahun}\n"
+                      . "- Status: {$dokumen->status}\n\n";
+
+            if (empty($chunks)) {
+                $context = $metadata . "*(Tidak ada cuplikan teks spesifik dari dokumen yang relevan ditemukan untuk pertanyaan ini. Jawab berdasarkan informasi dokumen di atas saja.)*";
+            } else {
+                $context = $metadata;
+                foreach ($chunks as $index => $chunk) {
+                    $num = $index + 1;
+                    $context .= "SUMBER [{$num}]:\n" . trim($chunk['content']) . "\n\n";
+                }
+            }
+
+            $systemPrompt = config('jdih_prompts.system');
+            $userPrompt = str_replace(
+                ['{context}', '{question}'],
+                [$context, $question],
+                config('jdih_prompts.user_template')
+            );
+
+            // UPGRADE: gabung system + user prompt jadi satu string.
+            // Model kecil (qwen3.5:4b) lebih konsisten mengikuti instruksi
+            // kalau semuanya jadi satu prompt, dibanding pakai parameter
+            // 'system' terpisah yang kadang "bocor" jadi bagian jawaban.
+            $combinedPrompt = $systemPrompt . "\n\n" . $userPrompt . "\n\nPENTING: Anda WAJIB menyertakan nomor sumber (contoh: [1] atau [2]) pada setiap kalimat yang menggunakan informasi dari SUMBER di atas!\n\n/no_think";
+
+            // DEBUG SEMENTARA
+            Log::info('DEBUG askDocument sebelum panggil Ollama', [
+                'model' => $this->ollamaModel,
+                'ollama_url' => $this->ollamaUrl,
+                'context_length_chars' => strlen($context),
+                'combined_prompt_length_chars' => strlen($combinedPrompt),
+            ]);
+
+            try {
+                $response = Http::timeout(280)->post("{$this->ollamaUrl}/api/generate", [
+                    'model' => $this->ollamaModel,
+                    'prompt' => $combinedPrompt,
+                    'stream' => false,
+                    'think' => false,
+                    'options' => [
+                        'temperature' => 0.2,
+                        'num_predict' => 800,
+                        'num_ctx' => 8192,
+                    ],
+                ]);
+
+                // DEBUG SEMENTARA
+                Log::info('DEBUG askDocument respons mentah Ollama', [
+                    'status' => $response->status(),
+                    'successful' => $response->successful(),
+                    'done_reason' => $response->json('done_reason'),
+                    'response_text' => $response->json('response'),
+                ]);
+
+                if ($response->successful()) {
+                    $answer = $response->json('response') ?? 'Tidak ada jawaban.';
+
+                    // UPGRADE: Build references array dengan nomor urut
+                    $allReferences = array_map(function ($chunk, $index) {
+                        return [
+                            'id' => $index + 1, // [1], [2], [3]
+                            'page' => $chunk['page'],
+                            'chunk_id' => $chunk['chunk_id'],
+                            'snippet' => substr($chunk['content'], 0, 150) . '...',
+                            'original_chunk' => $chunk,
+                        ];
+                    }, $chunks, array_keys($chunks));
+
+                    // Filter referensi agar hanya menampilkan yang benar-benar dikutip oleh LLM (contoh: [1], [2])
+                    preg_match_all('/\[(\d+)\]/', $answer, $matches);
+                    if (!empty($matches[1])) {
+                        $citedIds = array_unique(array_map('intval', $matches[1]));
+                        $candidates = array_filter($allReferences, function ($ref) use ($citedIds) {
+                            return in_array($ref['id'], $citedIds);
+                        });
+                    } else {
+                        // Jika LLM tidak memberikan kutipan angka, periksa SEMUA chunk yang diretriever
+                        $candidates = $allReferences;
+                    }
+
+                    // UPGRADE: Faithfulness Check & Span-Level Citation
+                    $verifiedReferences = [];
+                    foreach ($candidates as $ref) {
+                        $isFaithful = $this->verifyFaithfulness($question, $answer, $ref, $ref['original_chunk']);
+                        unset($ref['original_chunk']); // Hapus original_chunk dari response akhir
+                        
+                        if ($isFaithful) {
+                            $verifiedReferences[] = $ref;
+                        }
+                    }
+
+                    // Jika LLM halusinasi sepenuhnya (tidak ada chunk yang support)
+                    if (count($references) > 0 && count($verifiedReferences) === 0) {
+                        return [
+                            'answer' => "Maaf, setelah saya verifikasi kembali, saya tidak menemukan landasan yang cukup kuat di dalam dokumen ini untuk menjawab pertanyaan Anda secara pasti.",
+                            'references' => [],
+                        ];
+                    }
+
+                    return [
+                        'answer' => $answer,
+                        'references' => $verifiedReferences,
+                    ];
+                }
+
+                Log::error('Ollama gagal menjawab', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Exception saat panggil Ollama', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             return [
                 'answer' => config('jdih_prompts.negative_responses.technical_error'),
                 'references' => [],
             ];
+        });
+    }
+
+    /**
+     * Verifikasi entalment dan ekstrak nomor baris untuk Span-Level Citation.
+     */
+    protected function verifyFaithfulness(string $question, string $answer, array &$reference, array $originalChunk): bool
+    {
+        $chunkLines = explode("\n", $originalChunk['content'] ?? '');
+        $numberedContent = "";
+        foreach ($chunkLines as $i => $line) {
+            $lineStr = trim($line);
+            if (!empty($lineStr)) {
+                $numberedContent .= "[{$i}] {$lineStr}\n";
+            }
         }
 
-        $metadata = "INFORMASI DOKUMEN SAAT INI:\n"
-                  . "- Judul: {$dokumen->judul}\n"
-                  . "- Jenis: {$dokumen->jenis}\n"
-                  . "- Nomor/Tahun: {$dokumen->nomor} Tahun {$dokumen->tahun}\n"
-                  . "- Status: {$dokumen->status}\n\n";
+        $prompt = <<<PROMPT
+Anda adalah asisten verifikator fakta yang teliti.
+Tugas Anda adalah memverifikasi apakah Jawaban AI didukung oleh Teks Sumber, dan mencari nomor baris spesifik yang menjadi bukti.
 
-        if (empty($chunks)) {
-            $context = $metadata . "*(Tidak ada cuplikan teks spesifik dari dokumen yang relevan ditemukan untuk pertanyaan ini. Jawab berdasarkan informasi dokumen di atas saja.)*";
-        } else {
-            $context = $metadata . collect($chunks)
-                ->pluck('content')
-                ->filter()
-                ->implode("\n\n---\n\n");
-        }
+Pertanyaan User: {$question}
+Jawaban AI: {$answer}
 
-        $systemPrompt = config('jdih_prompts.system');
-        $userPrompt = str_replace(
-            ['{context}', '{question}'],
-            [$context, $question],
-            config('jdih_prompts.user_template')
-        );
+Teks Sumber (dengan nomor baris):
+{$numberedContent}
 
-        // UPGRADE: gabung system + user prompt jadi satu string.
-        // Model kecil (qwen3.5:4b) lebih konsisten mengikuti instruksi
-        // kalau semuanya jadi satu prompt, dibanding pakai parameter
-        // 'system' terpisah yang kadang "bocor" jadi bagian jawaban.
-        $combinedPrompt = $systemPrompt . "\n\n" . $userPrompt . "\n\n/no_think";
+Instruksi:
+1. Evaluasi apakah klaim dalam Jawaban AI didukung oleh Teks Sumber di atas.
+2. Jawab YES jika didukung, NO jika Teks Sumber tidak relevan atau tidak mendukung.
+3. Jika YES, sebutkan nomor-nomor baris (angka saja, pisahkan dengan koma) yang menjadi BUKTI KUAT untuk jawaban tersebut.
 
-        // DEBUG SEMENTARA
-        Log::info('DEBUG askDocument sebelum panggil Ollama', [
-            'model' => $this->ollamaModel,
-            'ollama_url' => $this->ollamaUrl,
-            'context_length_chars' => strlen($context),
-            'combined_prompt_length_chars' => strlen($combinedPrompt),
-        ]);
+Format Output WAJIB persis seperti ini (2 baris):
+SUPPORTED: YES
+LINES: 1, 2
+(Jika tidak didukung, cukup balas SUPPORTED: NO)
+PROMPT;
 
         try {
-            $response = Http::timeout(280)->post("{$this->ollamaUrl}/api/generate", [
-                'model' => $this->ollamaModel,
-                'prompt' => $combinedPrompt,
+            $response = Http::timeout(60)->post("{$this->ollamaUrl}/api/generate", [
+                'model' => $this->ollamaFastModel,
+                'prompt' => $prompt,
                 'stream' => false,
-                'think' => false,
                 'options' => [
-                    'temperature' => 0.2,
-                    'num_predict' => 800,
-                    'num_ctx' => 8192,
+                    'temperature' => 0.0,
+                    'num_predict' => 50,
                 ],
             ]);
 
-            // DEBUG SEMENTARA
-            Log::info('DEBUG askDocument respons mentah Ollama', [
-                'status' => $response->status(),
-                'successful' => $response->successful(),
-                'done_reason' => $response->json('done_reason'),
-                'response_text' => $response->json('response'),
-            ]);
-
             if ($response->successful()) {
-                $answer = $response->json('response') ?? 'Tidak ada jawaban.';
+                $verif = $response->json('response') ?? '';
+                $isSupported = str_contains(strtoupper($verif), 'SUPPORTED: YES');
+                
+                if (!$isSupported) return false;
 
-                // UPGRADE: Build references array dengan nomor urut
-                $references = array_map(function ($chunk, $index) {
-                    return [
-                        'id' => $index + 1, // [1], [2], [3]
-                        'page' => $chunk['page'],
-                        'chunk_id' => $chunk['chunk_id'],
-                        'snippet' => substr($chunk['content'], 0, 150) . '...',
-                    ];
-                }, $chunks, array_keys($chunks));
+                // Ekstrak baris-baris spesifik untuk Span-Level Citation
+                $x0 = $x1 = $y0 = $y1 = null;
+                $positions = $originalChunk['positions'] ?? [];
 
-                return [
-                    'answer' => $answer,
-                    'references' => $references,
-                ];
+                if (preg_match('/LINES:\s*([\d,\s]+)/i', $verif, $m)) {
+                    $lineNumbers = array_map('intval', explode(',', $m[1]));
+                    
+                    // Hitung bounding box hanya dari baris-baris ini
+                    foreach ($lineNumbers as $idx) {
+                        if (isset($positions[$idx])) {
+                            $pos = $positions[$idx];
+                            $parts = is_string($pos) ? explode("\t", $pos) : (is_array($pos) ? $pos : []);
+                            if (count($parts) >= 5) {
+                                $px0 = (float) $parts[1];
+                                $px1 = (float) $parts[2];
+                                $py0 = (float) $parts[3];
+                                $py1 = (float) $parts[4];
+                                $x0 = $x0 === null ? $px0 : min($x0, $px0);
+                                $x1 = $x1 === null ? $px1 : max($x1, $px1);
+                                $y0 = $y0 === null ? $py0 : min($y0, $py0);
+                                $y1 = $y1 === null ? $py1 : max($y1, $py1);
+                            }
+                        }
+                    }
+                }
+
+                // Jika gagal parsing baris, fallback ke semua posisi dalam chunk (Bounding box untuk keseluruhan chunk)
+                if ($x0 === null) {
+                    foreach ($positions as $pos) {
+                        $parts = is_string($pos) ? explode("\t", $pos) : (is_array($pos) ? $pos : []);
+                        if (count($parts) >= 5) {
+                            $px0 = (float) $parts[1];
+                            $px1 = (float) $parts[2];
+                            $py0 = (float) $parts[3];
+                            $py1 = (float) $parts[4];
+                            $x0 = $x0 === null ? $px0 : min($x0, $px0);
+                            $x1 = $x1 === null ? $px1 : max($x1, $px1);
+                            $y0 = $y0 === null ? $py0 : min($y0, $py0);
+                            $y1 = $y1 === null ? $py1 : max($y1, $py1);
+                        }
+                    }
+                }
+
+                $reference['x0'] = $x0;
+                $reference['x1'] = $x1;
+                $reference['y0'] = $y0;
+                $reference['y1'] = $y1;
+
+                return true;
             }
-
-            Log::error('Ollama gagal menjawab', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
         } catch (\Exception $e) {
-            Log::error('Exception saat panggil Ollama', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::error('Gagal saat verifikasi faithfulness', ['error' => $e->getMessage()]);
         }
 
-        return [
-            'answer' => config('jdih_prompts.negative_responses.technical_error'),
-            'references' => [],
-        ];
+        // Kalau gagal atau error, kembalikan false agar tidak menyorot dokumen yang salah
+        return false; 
     }
 }

@@ -27,13 +27,33 @@ class DocumentController extends Controller
     {
         return Inertia::render('Documents/Show', [
             'document' => $dokumenHukum,
+        ]);
+    }
+
+    public function bot(DokumenHukum $dokumenHukum)
+    {
+        // Buat saran pertanyaan dinamis berdasarkan metadata dokumen
+        $jenisStr = $dokumenHukum->jenis ?? 'Peraturan';
+        $nomorStr = $dokumenHukum->nomor ? " Nomor {$dokumenHukum->nomor}" : '';
+        $tahunStr = $dokumenHukum->tahun ? " Tahun {$dokumenHukum->tahun}" : '';
+        $docName = trim("{$jenisStr}{$nomorStr}{$tahunStr}");
+        
+        $dynamicSuggestions = [
+            "Apa isi dan tujuan dari {$docName}?",
+            "Jelaskan pengertian/ketentuan umum dalam peraturan ini",
+            "Adakah sanksi yang diatur dalam dokumen ini?",
+            "Bagaimana ruang lingkup atau sasaran dari peraturan ini?"
+        ];
+
+        return Inertia::render('Documents/Chat', [
+            'document' => $dokumenHukum,
             'assistant' => [
                 'name'         => config('jdih_prompts.assistant_profile.name'),
                 'tagline'      => config('jdih_prompts.assistant_profile.tagline'),
                 'greeting'     => config('jdih_prompts.assistant_profile.greeting'),
                 'description'  => config('jdih_prompts.assistant_profile.description'),
                 'capabilities' => config('jdih_prompts.assistant_profile.capabilities'),
-                'suggested'    => config('jdih_prompts.assistant_profile.suggested_questions'),
+                'suggested'    => $dynamicSuggestions,
             ],
         ]);
     }
@@ -92,7 +112,7 @@ class DocumentController extends Controller
 
         // UPGRADE: askDocument sekarang return array ['answer' => string, 'references' => array]
         $result = $ragflow->askDocument(
-            $dokumenHukum->ragflow_document_id,
+            $dokumenHukum,
             $request->input('question')
         );
 
@@ -137,17 +157,38 @@ class DocumentController extends Controller
         return response()->json(['messages' => $messages]);
     }
 
-    public function suggestions(DokumenHukum $dokumenHukum)
+    public function clearHistory(DokumenHukum $dokumenHukum)
+    {
+        $dokumenHukum->chatMessages()->delete();
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function suggestions(DokumenHukum $dokumenHukum, RagflowService $ragflow)
     {
         set_time_limit(300);
 
         $suggestions = Cache::remember(
             'doc_suggestions_'.$dokumenHukum->id,
             60 * 60 * 24,
-            function () use ($dokumenHukum) {
+            function () use ($dokumenHukum, $ragflow) {
+                // Ambil 2 chunk dari dokumen sebagai konteks pembuatan pertanyaan
+                $context = '';
+                if ($dokumenHukum->ragflow_document_id) {
+                    try {
+                        $chunks = $ragflow->retrieveChunks($dokumenHukum->ragflow_document_id, "ketentuan umum maksud tujuan ruang lingkup", 2);
+                        if (!empty($chunks)) {
+                            $context = collect($chunks)->pluck('content')->implode("\n\n");
+                            // Batasi agar prompt tidak terlalu bengkak
+                            $context = substr($context, 0, 1500);
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning("Gagal ambil chunk untuk suggestion: " . $e->getMessage());
+                    }
+                }
+
                 $prompt = str_replace(
-                    ['{judul}', '{jenis}', '{nomor_tahun}'],
-                    [$dokumenHukum->judul, $dokumenHukum->jenis, $dokumenHukum->nomor.' Tahun '.$dokumenHukum->tahun],
+                    ['{judul}', '{jenis}', '{nomor_tahun}', '{context}'],
+                    [$dokumenHukum->judul, $dokumenHukum->jenis, $dokumenHukum->nomor.' Tahun '.$dokumenHukum->tahun, $context],
                     config('jdih_prompts.suggestion_prompts.welcome')
                 );
 
@@ -204,11 +245,40 @@ class DocumentController extends Controller
         }
 
         // 3) Fallback: baris polos berakhiran "?"
-        preg_match_all('/^[\s\-\d\.]*([^\n"]{5,100}\?)\s*$/mu', $raw, $m3);
-        if (! empty($m3[1])) {
-            return array_slice($m3[1], 0, 3);
+        $m3 = [];
+        foreach (explode("\n", $raw) as $line) {
+            $line = trim($line);
+            $line = preg_replace('/^[\-\d\.\s]+/', '', $line);
+            if (str_ends_with($line, '?') && strlen($line) >= 5 && strlen($line) <= 200) {
+                $m3[] = $line;
+            }
+        }
+        if (! empty($m3)) {
+            return array_slice($m3, 0, 3);
         }
 
         return [];
+    }
+
+    public function status()
+    {
+        try {
+            // Cek Ollama status
+            $ollamaUrl = config('jdih_prompts.ollama.base_url', 'http://100.65.5.110:11434');
+            $ollamaResponse = Http::timeout(3)->get($ollamaUrl);
+            
+            // Cek RAGFlow status (sekadar ping base url atau login page)
+            $ragflowUrl = rtrim(env('RAGFLOW_BASE_URL', 'http://localhost:9380'), '/');
+            // Timeout cepat agar tidak membuat loading chat terlalu lama
+            $ragflowResponse = Http::timeout(3)->get($ragflowUrl);
+            
+            if ($ollamaResponse->successful() && $ragflowResponse->successful()) {
+                return response()->json(['status' => 'online']);
+            }
+        } catch (\Exception $e) {
+            // ignore
+        }
+        
+        return response()->json(['status' => 'offline']);
     }
 }

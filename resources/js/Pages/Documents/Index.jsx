@@ -239,7 +239,7 @@ export default function Index({ documents }) {
                                     >
                                         {/* Tanya AI: pojok kanan atas */}
                                         <Link
-                                            href={`/documents/${d.id}?chat=1`}
+                                            href={`/documents/${d.id}/bot`}
                                             title="Tanya Asisten AI"
                                             className="absolute right-5 top-5 flex items-center gap-1.5 rounded-full bg-amber-400 px-3.5 py-1.5 text-xs font-bold text-blue-950 shadow-sm transition hover:bg-amber-300 active:scale-95"
                                         >

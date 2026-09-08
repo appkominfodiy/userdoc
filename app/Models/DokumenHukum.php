@@ -23,10 +23,23 @@ class DokumenHukum extends Model
         'source_hash',
         'sync_status',
         'last_synced_at',
+        'tanggal_pengundangan',
+        'penandatangan',
+        'pemrakarsa',
+        'sumber',
+        'teu_badan',
+        'tempat_penetapan',
+        'lokasi',
+        'bahasa',
+        'bidang_hukum',
+        'urusan_pemerintahan',
+        'subjek',
+        'dokumen_terkait',
     ];
 
     protected $casts = [
         'tanggal_penetapan' => 'date',
+        'tanggal_pengundangan' => 'date',
         'last_synced_at' => 'datetime',
     ];
 

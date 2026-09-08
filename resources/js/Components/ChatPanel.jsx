@@ -63,7 +63,7 @@ function TextWithCitations({ text, refs, onCitation }) {
     );
 }
 
-export default function ChatPanel({ documentId, onCitation, assistant, onClose }) {
+export default function ChatPanel({ documentId, onCitation, assistant, onClose, initialInput, clearInitialInput }) {
     const a = { ...DEFAULT_ASSISTANT, ...(assistant || {}) };
 
         const [messages, setMessages] = useState([{ role: 'ai', text: a.greeting, time: nowTime() }]);
@@ -72,8 +72,35 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const endRef = useRef(null);
+    const inputRef = useRef(null);
     const fetchedWelcome = useRef(false);
     const fetchedHistory = useRef(false);
+
+    const [botStatus, setBotStatus] = useState('checking');
+
+    // BARU: Set input dari prop luar (seperti dari fitur blok teks)
+    useEffect(() => {
+        if (initialInput) {
+            setInput(initialInput);
+            clearInitialInput?.();
+            // Optional: beri sedikit jeda agar DOM siap (misal panel chat baru terbuka)
+            setTimeout(() => inputRef.current?.focus(), 100);
+        }
+    }, [initialInput, clearInitialInput]);
+
+    // BARU: Cek status backend Ollama/bot
+    useEffect(() => {
+        const checkStatus = () => {
+            axios.get('/bot/status')
+                .then(res => setBotStatus(res.data.status))
+                .catch(() => setBotStatus('offline'));
+        };
+        
+        checkStatus();
+        const interval = setInterval(checkStatus, 30000); // Polling tiap 30 detik
+        
+        return () => clearInterval(interval);
+    }, []);
 
     // BARU: ambil riwayat chat tersimpan saat komponen dibuka
     useEffect(() => {
@@ -137,6 +164,29 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
         }
     };
 
+    const clearChat = async () => {
+        if (!confirm('Apakah Anda yakin ingin menghapus semua riwayat percakapan untuk dokumen ini?')) return;
+        setLoading(true);
+        try {
+            await axios.delete(`/documents/${documentId}/history`);
+            setMessages([{ role: 'ai', text: a.greeting, time: nowTime() }]);
+            
+            // Ambil ulang saran pertanyaan setelah chat dihapus
+            setLoadingSuggestions(true);
+            const { data } = await axios.get(`/documents/${documentId}/suggestions`);
+            if (Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+                setSuggestions(data.suggestions);
+            } else {
+                setSuggestions(a.suggested || []);
+            }
+        } catch (e) {
+            console.error('Gagal menghapus riwayat chat:', e);
+        } finally {
+            setLoading(false);
+            setLoadingSuggestions(false);
+        }
+    };
+
     const showWelcome = messages.length === 1 && !loading;
 
     return (
@@ -147,20 +197,35 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
                     <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl bg-blue-950 shadow">
                         <ScalesIcon className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
                     </div>
-                    <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full border-2 border-white bg-emerald-500"></span>
+                    <span 
+                        className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full border-2 border-white ${
+                            botStatus === 'online' ? 'bg-emerald-500' : 'bg-slate-400'
+                        }`}
+                        title={botStatus === 'online' ? 'Bot Aktif' : botStatus === 'offline' ? 'Bot Bermasalah/Offline' : 'Mengecek status...'}
+                    ></span>
                 </div>
                 <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-bold text-slate-900">{a.name}</h3>
                     <p className="truncate text-[11px] sm:text-xs text-slate-500">{a.tagline}</p>
                 </div>
-                {onClose && (
-                    <button onClick={onClose} title="Tutup chat"
-                            className="rounded-full p-1.5 sm:p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95">
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                )}
+                <div className="flex items-center gap-1">
+                    {messages.length > 1 && (
+                        <button onClick={clearChat} title="Hapus riwayat chat"
+                                className="rounded-full p-1.5 sm:p-2 text-slate-400 transition hover:bg-red-100 hover:text-red-600 active:scale-95">
+                            <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    )}
+                    {onClose && (
+                        <button onClick={onClose} title="Tutup chat"
+                                className="rounded-full p-1.5 sm:p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 active:scale-95">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* ===== Area pesan ===== */}
@@ -217,7 +282,7 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
                                                     <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                     </svg>
-                                                    Sumber dokumen ({m.refs.length}):
+                                                    Sumber referensi (klik untuk melihat teks asli):
                                                 </p>
                                                 {m.refs.map((r) => (
                                                     <button
@@ -230,7 +295,7 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
                                                         </span>
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center gap-1.5">
-                                                                <span className="text-[11px] font-semibold text-blue-900">Halaman {r.page}</span>
+                                                                <span className="text-[11px] font-semibold text-blue-900">{r.page ? `Halaman ${r.page}` : 'Teks Referensi'}</span>
                                                                 <svg className="h-3 w-3 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-amber-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                                                 </svg>
@@ -300,6 +365,7 @@ export default function ChatPanel({ documentId, onCitation, assistant, onClose }
             {/* ===== Input ===== */}
             <div className="flex items-center gap-2 border-t border-slate-200 bg-white p-2 sm:p-3 pb-safe">
                 <input
+                    ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && send()}

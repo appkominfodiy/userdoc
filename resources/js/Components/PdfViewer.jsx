@@ -7,11 +7,12 @@ const MAX_SCALE = 3;
 const AUTO_CAP = 1.4;   // batas zoom mode auto = ukuran baca nyaman
 const STEP = 0.2;
 
-export default function PdfViewer({ url, page, highlight, onPageChange }) {
+export default function PdfViewer({ url, page, highlight, onPageChange, onSelectText }) {
     const canvasRef = useRef(null);
     const scrollRef = useRef(null);
     const pdfRef = useRef(null);
     const renderTaskRef = useRef(null);
+    const textLayerRef = useRef(null);
 
     const [numPages, setNumPages] = useState(0);
     const [box, setBox] = useState(null);
@@ -24,6 +25,12 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
     // Muat pdf.js
     useEffect(() => {
         if (window.pdfjsLib) { setReady(true); return; }
+        
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `${CDN}/pdf_viewer.min.css`;
+        document.head.appendChild(link);
+
         const s = document.createElement('script');
         s.src = `${CDN}/pdf.min.js`;
         s.onload = () => {
@@ -64,7 +71,8 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
         pdf.getPage(page).then(async (p) => {
             if (cancelled) return;
             const canvas = canvasRef.current;
-            if (!canvas) return;
+            const textLayer = textLayerRef.current;
+            if (!canvas || !textLayer) return;
 
             const baseVp = p.getViewport({ scale: 1 });
             const padding = 48;
@@ -86,6 +94,17 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
             renderTaskRef.current = task;
             try {
                 await task.promise;
+                
+                // Render text layer
+                if (cancelled) return;
+                textLayer.innerHTML = '';
+                const textContent = await p.getTextContent();
+                window.pdfjsLib.renderTextLayer({
+                    textContent: textContent,
+                    container: textLayer,
+                    viewport: vp,
+                    textDivs: []
+                });
             } catch (e) {
                 return; // render dibatalkan saat drag/zoom — normal
             }
@@ -95,7 +114,7 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
 
             // Highlight sitasi
             if (highlight && highlight.page === page) {
-                if ([highlight.x0, highlight.y0, highlight.x1, highlight.y1].every((v) => v !== undefined)) {
+                if ([highlight.x0, highlight.y0, highlight.x1, highlight.y1].every((v) => v != null)) {
                     setBox({
                         left: highlight.x0 * vp.scale,
                         top: highlight.y0 * vp.scale,
@@ -134,11 +153,56 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
     };
     const zoomAuto = () => setZoomMode('auto');
 
+    // Handle text selection
+    const [selectionRect, setSelectionRect] = useState(null);
+    const [selectedText, setSelectedText] = useState("");
+
+    useEffect(() => {
+        const handleSelection = () => {
+            const selection = window.getSelection();
+            const text = selection.toString().trim();
+            // Cek apakah teks yang diseleksi berada di dalam textLayer
+            if (text && textLayerRef.current && textLayerRef.current.contains(selection.anchorNode)) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                const containerRect = scrollRef.current.getBoundingClientRect();
+                
+                // Posisi tooltip sedikit di atas teks yang diblok
+                setSelectionRect({
+                    top: rect.top - containerRect.top + scrollRef.current.scrollTop - 40,
+                    left: rect.left - containerRect.left + scrollRef.current.scrollLeft + (rect.width / 2)
+                });
+                setSelectedText(text);
+            } else {
+                // Jangan hilangkan tooltip jika user mengklik tooltip itu sendiri
+                setTimeout(() => {
+                    const newSel = window.getSelection().toString().trim();
+                    if (!newSel) {
+                        setSelectionRect(null);
+                        setSelectedText("");
+                    }
+                }, 100);
+            }
+        };
+
+        document.addEventListener('mouseup', handleSelection);
+        return () => document.removeEventListener('mouseup', handleSelection);
+    }, []);
+
+    const handleAskAi = () => {
+        if (onSelectText && selectedText) {
+            onSelectText(selectedText);
+        }
+        window.getSelection().removeAllRanges();
+        setSelectionRect(null);
+        setSelectedText("");
+    };
+
     const btnCls =
         'flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:border-blue-600 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
 
     return (
-        <div className="flex h-full flex-col bg-slate-100">
+        <div className="flex h-full flex-col bg-slate-100 relative">
             {/* ===== Toolbar ===== */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-6 sm:py-2.5">
                 {/* Info halaman */}
@@ -154,7 +218,7 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
                         onClick={() => changeZoom(-STEP)}
                         disabled={zoomMode === 'manual' && manualScale <= MIN_SCALE}
                         className={btnCls}
-                        title="Perkeil"
+                        title="Perkecil"
                     >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                             <path strokeLinecap="round" d="M5 12h14" />
@@ -215,16 +279,39 @@ export default function PdfViewer({ url, page, highlight, onPageChange }) {
             </div>
 
             {/* ===== Area PDF ===== */}
-            <div ref={scrollRef} className="flex-1 overflow-auto p-4 sm:p-6">
+            <div ref={scrollRef} className="flex-1 overflow-auto p-4 sm:p-6 relative">
                 <div className="relative mx-auto w-fit">
                     <canvas ref={canvasRef} className="rounded-sm shadow-lg" />
+                    
+                    {/* Text Layer untuk blok teks */}
+                    <div 
+                        ref={textLayerRef} 
+                        className="textLayer absolute inset-0 z-10" 
+                        style={{ '--scale-factor': displayScale }} 
+                    />
+
                     {box && (
                         <div
-                            className="pointer-events-none absolute animate-pulse rounded border-4 border-amber-400 bg-amber-300/30 shadow-lg"
+                            className="pointer-events-none absolute animate-pulse rounded border-4 border-amber-400 bg-amber-300/30 shadow-lg z-0"
                             style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
                         />
                     )}
                 </div>
+
+                {/* Tooltip Tanya AI */}
+                {selectionRect && (
+                    <button
+                        onClick={handleAskAi}
+                        className="absolute z-50 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-blue-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xl hover:bg-blue-800 transition animate-[fadeIn_0.2s_ease-out]"
+                        style={{ top: selectionRect.top, left: selectionRect.left }}
+                    >
+                        <svg className="h-3.5 w-3.5 text-amber-300" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
+                        </svg>
+                        Tanya AI
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-blue-900"></div>
+                    </button>
+                )}
             </div>
         </div>
     );
